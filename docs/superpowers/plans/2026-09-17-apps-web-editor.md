@@ -3153,8 +3153,13 @@ export function EditorPane({
     if (parent === null) return;
 
     /**
-     * 진단은 **이미 파싱한 것을 그대로 넘긴다.** 린터 안에서 다시 파싱하면
-     * 글자를 칠 때마다 같은 일을 두 번 한다.
+     * 린터는 **제 안에서 다시 파싱한다.**
+     *
+     * 화면 쪽이 이미 파싱해 두었으니 그것을 넘기고 싶지만, CodeMirror 의
+     * `linter()` 는 제 상태만 보고 스스로 답하는 콜백이라 넘길 통로가 없다.
+     * 통로를 내려면 컴포넌트 경계를 바꿔야 하는데, 파서가 회복형이라 한 번 더
+     * 도는 값이 싸서 그 값을 치를 이유가 없다. 지금은 두 번 돈다고 적어 둔다 —
+     * 안 그러면 다음 사람이 "넘겨 받는다" 는 주석을 믿고 엉뚱한 곳을 고친다.
      */
     const keelLinter = linter((view): CmDiagnostic[] => {
       const { document: parsed } = parseSource(view.state.doc.toString());
@@ -3170,6 +3175,14 @@ export function EditorPane({
     const view = new EditorView({
       parent,
       state: EditorState.create({
+        /**
+         * **처음 내용을 직접 넣어야 한다.**
+         *
+         * `yCollab` 의 동기화 플러그인은 `Y.Text` 의 **앞으로의 변화**만 지켜본다 —
+         * 이미 들어 있는 글자는 안 가져온다. 이 줄이 없으면 씨앗 문서가 있는데도
+         * 편집기가 빈 채로 뜬다. 타입·린트·검사·빌드는 전부 통과한다.
+         */
+        doc: keelDocument.source.toString(),
         extensions: [
           lineNumbers(),
           lintGutter(),
@@ -3287,9 +3300,18 @@ function idOf(hit: Hit | undefined): string | undefined {
 
 export default function EditorPage() {
   /**
-   * `YSyncConfig` 를 넘기는 것이 핵심이다. CodeMirror 의 로컬 편집은 그 클래스의
+   * `YSyncConfig` 를 함께 넘긴다. CodeMirror 의 로컬 편집은 그 클래스의
    * 인스턴스를 origin 으로 쓰고, Yjs 는 origin 을 생성자로도 견주므로 클래스만
-   * 넣어 두면 인스턴스를 손에 안 쥐어도 되돌리기에 걸린다.
+   * 넣어 두면 인스턴스를 손에 안 쥐어도 걸린다.
+   *
+   * **다만 지금은 이것이 없어도 돈다.** `y-codemirror.next` 0.3.6 의
+   * `yUndoManager` 플러그인이 붙을 때 제가 쓰는 인스턴스를
+   * `undoManager.addTrackedOrigin(...)` 으로 직접 등록한다
+   * (`src/y-undomanager.js:98`). 빼 보고 확인했다 — 타자 되돌리기는 그대로 된다.
+   *
+   * 그래도 두는 이유는 그 등록이 **저 라이브러리의 사정**이기 때문이다. 판이
+   * 바뀌거나 플러그인이 붙기 전에 생긴 편집이 있으면 기댈 곳이 없어진다.
+   * 생성자 매칭 자체는 `keel-document` 의 검사가 따로 묶고 있다.
    */
   const document = useMemo(() => createKeelDocument(SEED, [YSyncConfig]), []);
   /**
@@ -3363,12 +3385,18 @@ Expected:
 - 치는 도중 화면이 비지 않는다 (파서가 회복한다)
 - **캔버스에서 노드를 끌고 `Cmd+Z` 를 누르면 자리가 돌아오고, 글자를 치고 `Cmd+Z` 를 누르면 글자가 돌아온다** — 한 역사다
 
-- [ ] **Step 6: 되돌리기 배선이 실제로 도는지 확인한다**
+- [ ] **Step 6: 하나짜리 역사가 실제로 도는지 확인한다**
 
-`page.tsx` 의 `createKeelDocument(SEED, [YSyncConfig])` 에서 `[YSyncConfig]` 를 빼고
-화면에서 글자를 친 뒤 `Cmd+Z` 를 눌러 본다.
+`yCollab(source, null, { undoManager })` 의 세 번째 인자를
+`{ undoManager: false }` 로 바꾼다 — `y-codemirror.next` 가 되돌리기 플러그인을
+아예 안 붙이게 된다.
 
-Expected: 글자가 안 돌아온다(끌기만 돌아온다). 확인 후 되돌린다.
+화면에서 노드를 하나 끌고, 글자를 조금 치고, `Cmd+Z` 를 눌러 본다.
+
+Expected: **글자는 안 돌아오고 끌기만 돌아온다.** 확인 후 되돌린다.
+
+(`[YSyncConfig]` 를 빼는 것으로는 **안 문다.** 그 판의 `yUndoManager` 플러그인이
+붙을 때 제 인스턴스를 스스로 등록하기 때문이다 — 확인했고 주석에 적어 두었다.)
 
 - [ ] **Step 7: 커밋**
 
@@ -3381,12 +3409,21 @@ y-codemirror.next 가 Y.Text 와 편집기를 잇는다. awareness 는 아직 �
 null 을 넘긴다 — 그 인자는 if (awareness) 로 감싸여 있어 원격 커서 플러그인만
 빠진다.
 
-되돌리기는 문서가 들고 있는 하나를 그대로 쓰고, page 가 YSyncConfig 클래스를
-origin 으로 넘긴다. Yjs 가 origin 을 생성자로도 견주므로 인스턴스를 손에 안
-쥐어도 걸린다. 그 인자를 빼고 Cmd+Z 가 글자를 못 되돌리는 것을 확인했다.
+처음 내용을 EditorState 에 직접 넣는다. yCollab 의 동기화 플러그인은 Y.Text 의
+앞으로의 변화만 지켜보고 이미 들어 있는 글자는 안 가져오므로, 이 줄이 없으면
+씨앗 문서가 있는데도 편집기가 빈 채로 뜬다. 타입·린트·검사·빌드는 다 통과한다.
 
-진단은 이미 파싱한 것을 그대로 넘긴다. 린터 안에서 다시 파싱하면 글자를 칠
-때마다 같은 일을 두 번 한다.
+되돌리기는 문서가 들고 있는 하나를 그대로 쓴다. CodeMirror 의 history() 는
+일부러 안 넣는다 — 넣으면 역사가 둘로 갈려 무엇을 되돌렸는지 알 수 없게 된다.
+undoManager: false 로 바꿔 글자만 안 돌아오는 것을 확인했다.
+
+page 가 YSyncConfig 클래스도 함께 넘기지만, 재 보니 지금은 그것이 없어도 돈다 —
+y-codemirror.next 0.3.6 의 플러그인이 제 인스턴스를 스스로 등록한다. 그래도
+두는 이유와 함께 주석에 적었다. 저쪽 사정에 기대는 것이기 때문이다.
+
+린터는 제 안에서 다시 파싱한다. CodeMirror 의 linter() 가 제 상태만 보고
+스스로 답하는 콜백이라 넘길 통로가 없고, 파서가 회복형이라 한 번 더 도는 값이
+싸다. "넘겨 받는다" 고 적어 두면 다음 사람이 엉뚱한 곳을 고치므로 사실대로 적었다.
 
 목록을 따로 둔 것은 밑줄만으로는 화면 밖의 잘못을 못 보기 때문이다. "선언 없이
 만들어진 노드" 같은 조용한 경고가 여기서 눈에 들어온다 — 오타가 새 노드가 되는
@@ -3596,9 +3633,18 @@ function idOf(hit: Hit | undefined): string | undefined {
 
 export default function EditorPage() {
   /**
-   * `YSyncConfig` 를 넘기는 것이 핵심이다. CodeMirror 의 로컬 편집은 그 클래스의
+   * `YSyncConfig` 를 함께 넘긴다. CodeMirror 의 로컬 편집은 그 클래스의
    * 인스턴스를 origin 으로 쓰고, Yjs 는 origin 을 생성자로도 견주므로 클래스만
-   * 넣어 두면 인스턴스를 손에 안 쥐어도 되돌리기에 걸린다.
+   * 넣어 두면 인스턴스를 손에 안 쥐어도 걸린다.
+   *
+   * **다만 지금은 이것이 없어도 돈다.** `y-codemirror.next` 0.3.6 의
+   * `yUndoManager` 플러그인이 붙을 때 제가 쓰는 인스턴스를
+   * `undoManager.addTrackedOrigin(...)` 으로 직접 등록한다
+   * (`src/y-undomanager.js:98`). 빼 보고 확인했다 — 타자 되돌리기는 그대로 된다.
+   *
+   * 그래도 두는 이유는 그 등록이 **저 라이브러리의 사정**이기 때문이다. 판이
+   * 바뀌거나 플러그인이 붙기 전에 생긴 편집이 있으면 기댈 곳이 없어진다.
+   * 생성자 매칭 자체는 `keel-document` 의 검사가 따로 묶고 있다.
    */
   const keelDocument = useMemo(() => createKeelDocument(SEED, [YSyncConfig]), []);
   /**
