@@ -1,0 +1,26 @@
+{
+  "name": "@keel/renderer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@keel/dsl": "workspace:*",
+    "@keel/graph": "workspace:*"
+  },
+  "devDependencies": {
+    "@keel/config": "workspace:*",
+    "@types/node": "24.9.2",
+    "eslint": "10.9.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
+  }
+}
