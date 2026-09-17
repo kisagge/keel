@@ -36,8 +36,13 @@ export function EditorPane({
     if (parent === null) return;
 
     /**
-     * 진단은 **이미 파싱한 것을 그대로 넘긴다.** 린터 안에서 다시 파싱하면
-     * 글자를 칠 때마다 같은 일을 두 번 한다.
+     * 린터는 **제 안에서 다시 파싱한다.**
+     *
+     * 화면 쪽이 이미 파싱해 두었으니 그것을 넘기고 싶지만, CodeMirror 의
+     * `linter()` 는 제 상태만 보고 스스로 답하는 콜백이라 넘길 통로가 없다.
+     * 통로를 내려면 컴포넌트 경계를 바꿔야 하는데, 파서가 회복형이라 한 번 더
+     * 도는 값이 싸서 그 값을 치를 이유가 없다. 지금은 두 번 돈다고 적어 둔다 —
+     * 안 그러면 다음 사람이 "넘겨 받는다" 는 주석을 믿고 엉뚱한 곳을 고친다.
      */
     const keelLinter = linter((view): CmDiagnostic[] => {
       const { document: parsed } = parseSource(view.state.doc.toString());

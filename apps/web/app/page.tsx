@@ -21,9 +21,18 @@ function idOf(hit: Hit | undefined): string | undefined {
 
 export default function EditorPage() {
   /**
-   * `YSyncConfig` 를 넘기는 것이 핵심이다. CodeMirror 의 로컬 편집은 그 클래스의
+   * `YSyncConfig` 를 함께 넘긴다. CodeMirror 의 로컬 편집은 그 클래스의
    * 인스턴스를 origin 으로 쓰고, Yjs 는 origin 을 생성자로도 견주므로 클래스만
-   * 넣어 두면 인스턴스를 손에 안 쥐어도 되돌리기에 걸린다.
+   * 넣어 두면 인스턴스를 손에 안 쥐어도 걸린다.
+   *
+   * **다만 지금은 이것이 없어도 돈다.** `y-codemirror.next` 0.3.6 의
+   * `yUndoManager` 플러그인이 붙을 때 제가 쓰는 인스턴스를
+   * `undoManager.addTrackedOrigin(...)` 으로 직접 등록한다
+   * (`src/y-undomanager.js:98`). 빼 보고 확인했다 — 타자 되돌리기는 그대로 된다.
+   *
+   * 그래도 두는 이유는 그 등록이 **저 라이브러리의 사정**이기 때문이다. 판이
+   * 바뀌거나 플러그인이 붙기 전에 생긴 편집이 있으면 기댈 곳이 없어진다.
+   * 생성자 매칭 자체는 `keel-document` 의 검사가 따로 묶고 있다.
    */
   const document = useMemo(() => createKeelDocument(SEED, [YSyncConfig]), []);
   /**
