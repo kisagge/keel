@@ -69,3 +69,21 @@ export { countVisible, cullScene } from './cull.js';
 export type { VisibleScene } from './cull.js';
 export { HIT_ORDER, buildSpatialIndex, hitTest, hitTestAll } from './hit-test.js';
 export type { Hit, HitOptions, SpatialIndex } from './hit-test.js';
+export { paintOrder, paintScene } from './paint/scene.js';
+export type { PaintItem, PaintKind, PaintOptions } from './paint/scene.js';
+export { paintNode } from './paint/node.js';
+export type { NodePaintState } from './paint/node.js';
+export { paintGroup } from './paint/group.js';
+export type { GroupPaintState } from './paint/group.js';
+export { paintEdge } from './paint/edge.js';
+export type { EdgePaintState } from './paint/edge.js';
+export { contextMeasureText } from './paint/measure.js';
+export type {
+  Ctx2D,
+  LineCap,
+  LineJoin,
+  MeasuringContext,
+  TextAlign,
+  TextBaseline,
+  TextMetricsLike,
+} from './paint/context.js';
