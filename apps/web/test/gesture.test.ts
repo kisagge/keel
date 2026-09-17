@@ -105,14 +105,28 @@ describe('팬', () => {
     expect(moved.intent.viewport.y).toBe(-30);
   });
 
-  /** 팬은 누른 자리에서 재야 한다. 직전 자리에서 재면 반올림 오차가 쌓인다 */
-  it('팬은 누른 자리에서 잰다', () => {
+  /**
+   * 팬은 누른 자리에서 재야 한다. 직전 자리에서 재면 반올림 오차가 쌓인다.
+   *
+   * **세 번 움직이는 것이 중요하다.** 첫 번째 움직임은 아직 `pressed` 라
+   * 문턱을 넘는 전환 그 자체이고, `panning` 갈래는 두 번째부터 돈다. 두 번만
+   * 움직이면 그 갈래를 딱 한 번 지나므로 "자리를 갱신하며 쌓이는" 버그가
+   * 드러날 자리가 없다 — 세 번째에서야 어긋난다.
+   */
+  it('팬은 여러 번 움직여도 누른 자리에서 잰다', () => {
     const g = onPointerDown(IDLE, at(0, 0), undefined, DEFAULT_VIEWPORT);
-    const first = onPointerMove(g, at(10, 0));
-    const second = onPointerMove(first.gesture, at(30, 0));
 
+    const first = onPointerMove(g, at(10, 0));
+    if (first.intent.kind !== 'pan') throw new Error('팬이 아니다');
+    expect(first.intent.viewport.x).toBe(-10);
+
+    const second = onPointerMove(first.gesture, at(30, 0));
     if (second.intent.kind !== 'pan') throw new Error('팬이 아니다');
     expect(second.intent.viewport.x).toBe(-30);
+
+    const third = onPointerMove(second.gesture, at(45, 0));
+    if (third.intent.kind !== 'pan') throw new Error('팬이 아니다');
+    expect(third.intent.viewport.x).toBe(-45);
   });
 
   it('배경을 눌렀다 그냥 떼면 선택을 푼다', () => {
