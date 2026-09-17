@@ -14,6 +14,14 @@ import { IDLE, onPointerDown, onPointerMove, onPointerUp } from '../interaction/
 import type { Gesture, Intent } from '../interaction/gesture.js';
 import { wheelToViewport } from '../interaction/wheel.js';
 
+/**
+ * `handleIntent` 의 `void` 반환이 컴파일러의 소진성 검사를 묵살하지 않도록
+ * 한다. Intent 가 늘면 이 가드가 빌드를 깨뜨려 구현을 강제한다.
+ */
+function assertNever(value: never): never {
+  throw new Error(`빠뜨린 의도 종류: ${String(value)}`);
+}
+
 export interface CanvasPaneProps {
   readonly document: KeelDocument;
   readonly selection: ReadonlySet<string>;
@@ -142,6 +150,9 @@ export function CanvasPane({ document, selection, onSelect }: CanvasPaneProps) {
           moveNode(document, intent.nodeId, intent.at);
           invalidate();
           return;
+
+        default:
+          return assertNever(intent);
       }
     },
     [document, invalidate, onSelect, viewportRef],
