@@ -18,7 +18,7 @@
 - **`verbatimModuleSyntax: true`** — 타입은 반드시 `import type`.
 - **`noUncheckedIndexedAccess`·`exactOptionalPropertyTypes` 켜져 있다** — 배열 인덱싱 결과는 `| undefined`, 선택 속성은 `?: T | undefined` 로 적는다.
 - **상대 경로 import 는 `.js` 확장자로 끝난다** (ESM). 예: `./text-edits.js`.
-- **`@keel/*` 패키지는 빌드 없이 생 `.ts` 를 내보낸다.** Next 는 `transpilePackages` 가 필요하고, Vitest 는 그대로 읽는다.
+- **`@keel/*` 패키지는 빌드 없이 생 `.ts` 를 내보내고, 상대 경로를 `./cull.js` 처럼 적는다.** Vitest 는 그대로 읽는다. Turbopack 은 `apps/web/tsconfig.json` 의 `moduleResolution: nodenext` 가 있어야 읽는다 — `transpilePackages` 로는 안 된다.
 - **jsdom·happy-dom 을 저장소에 들이지 않는다.** React 컴포넌트 단위 검사는 하지 않고, 검사할 값어치가 있는 것은 전부 `src/document/`·`src/interaction/` 의 순수 모듈로 내린다.
 - **주석과 검사 이름은 한국어로 쓴다.** 기존 패키지와 같은 어조 — 무엇을 하는지가 아니라 **왜 그렇게 했는지**를 적는다.
 - **각 태스크를 커밋하기 전에 고친 것을 되돌려 검사가 실제로 지는지 확인한다.** 이것이 이 저장소의 방식이고, 앞선 판에서 아무것도 묶지 못하는 검사를 실제로 잡아냈다.
@@ -30,7 +30,7 @@
 
 | 파일 | 책임 |
 |---|---|
-| `apps/web/package.json` · `next.config.ts` · `tsconfig.json` · `eslint.config.js` · `vitest.config.ts` | 앱 설정. `transpilePackages` 가 여기 있다 |
+| `apps/web/package.json` · `next.config.ts` · `tsconfig.json` · `eslint.config.js` · `vitest.config.ts` | 앱 설정. Turbopack 이 `./x.js` 를 `x.ts` 로 찾게 하는 `moduleResolution: nodenext` 가 여기 있다 |
 | `apps/web/app/layout.tsx` · `page.tsx` · `globals.css` | App Router 뼈대. `page.tsx` 가 `'use client'` 화면 |
 | `apps/web/src/document/text-edits.ts` | `applyTextEdits` — 이 판의 핵심. Y.Text 에 구간 수정을 얹는다 |
 | `apps/web/src/document/keel-document.ts` | `Y.Doc` 배선과 하나짜리 되돌리기 역사 |
@@ -140,12 +140,18 @@ Expected: FAIL — `apps/web` 이 아직 워크스페이스가 아니라 `vitest
 import type { NextConfig } from 'next';
 
 /**
- * `@keel/*` 는 빌드 없이 생 `.ts` 를 내보낸다(`exports` 가 `./src/index.ts` 를 가리킨다).
- * 그래서 Next 가 직접 옮겨 담아야 한다 — 이걸 빼면 워크스페이스 소스를 못 읽는다.
+ * 비어 있다.
+ *
+ * `@keel/*` 는 빌드 없이 생 `.ts` 를 내보내는데(`exports` 가 `./src/index.ts` 를
+ * 가리킨다), Next 16 의 Turbopack 은 워크스페이스 소스를 그대로 읽으므로
+ * `transpilePackages` 가 필요 없다. 넣어도 결과가 같은 것을 확인했다.
+ *
+ * 대신 걸리는 것은 **`tsconfig.json` 의 `moduleResolution`** 이다. 이 저장소의
+ * 패키지들은 상대 경로를 `./cull.js` 처럼 적는데(ESM 관례), Turbopack 이 그것을
+ * `cull.ts` 로 바꿔 찾으려면 `nodenext` 여야 한다. 공유 프리셋은 `bundler` 라
+ * `apps/web/tsconfig.json` 에서만 덮어쓴다 — 거기 그 이유를 적어 두었다.
  */
-const config: NextConfig = {
-  transpilePackages: ['@keel/dsl', '@keel/graph', '@keel/renderer'],
-};
+const config: NextConfig = {};
 
 export default config;
 ```
@@ -157,9 +163,27 @@ export default config;
   "extends": "@keel/config/tsconfig/next.json",
   "compilerOptions": {
     "types": ["node"],
+
+    /**
+     * 공유 프리셋은 `bundler` 인데 여기서만 `nodenext` 로 덮어쓴다.
+     *
+     * 이 저장소의 패키지들은 상대 경로를 `./cull.js` 처럼 적는다(ESM 관례).
+     * Turbopack 이 그것을 `cull.ts` 로 바꿔 찾아 주려면 `nodenext` 여야 한다 —
+     * `bundler` 로 두면 `@keel/renderer` 의 재수출 전부가 "모듈을 못 찾는다" 로
+     * 빌드를 깬다. `transpilePackages` 로는 안 고쳐진다(그쪽은 필요도 없다).
+     */
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["next-env.d.ts", "app/**/*", "src/**/*", "test/**/*", "*.ts"],
+
+  /**
+   * `*.ts` 를 넣지 않는다. 넣으면 `next.config.ts` 와 `vitest.config.ts` 가
+   * 이 프로젝트에도 들고 공유 eslint 프리셋의 `allowDefaultProject` 에도 들어,
+   * typescript-eslint 가 파싱을 거부한다. 다른 패키지들도 `src`·`test` 만 넣는다.
+   */
+  "include": ["next-env.d.ts", "app/**/*", "src/**/*", "test/**/*"],
   "exclude": ["node_modules", ".next"]
 }
 ```
@@ -255,7 +279,7 @@ export default function EditorPage() {
 ```
 
 `DEFAULT_THEME` 을 화면에 쓰는 것은 일부러다. 이 값이 브라우저에 뜨면
-`transpilePackages` 가 실제로 돌았다는 뜻이다.
+Turbopack 이 워크스페이스 소스를 실제로 읽었다는 뜻이다.
 
 - [ ] **Step 5: 설치하고 검사가 통과하는 것을 본다**
 
@@ -265,12 +289,18 @@ Expected: PASS (1 test)
 - [ ] **Step 6: 빌드와 타입·린트를 확인한다**
 
 Run: `cd /Users/kisagge/my-projects/keel && pnpm typecheck && pnpm lint && pnpm --filter @keel/web build`
-Expected: 셋 다 성공. 빌드가 통과하면 `transpilePackages` 가 실제로 돈 것이다.
+Expected: 셋 다 성공.
 
-- [ ] **Step 7: `transpilePackages` 를 빼 보고 빌드가 지는 것을 확인한 뒤 되돌린다**
+- [ ] **Step 7: 진짜 관문이 무엇인지 되돌려 확인한다**
 
-Run: `next.config.ts` 에서 `transpilePackages` 줄을 지우고 `pnpm --filter @keel/web build`
-Expected: FAIL. 확인 후 되돌린다.
+`apps/web/tsconfig.json` 에서 `module`·`moduleResolution` 두 줄을 지우고
+(공유 프리셋의 `bundler` 로 떨어뜨린 뒤) `pnpm --filter @keel/web build`.
+
+Expected: FAIL — `@keel/renderer/src/index.ts` 의 상대 재수출마다
+`Module not found: Can't resolve './cull.js'` 가 난다. 확인 후 되돌린다.
+
+`transpilePackages` 는 **관문이 아니다.** Next 16 의 Turbopack 은 워크스페이스
+소스를 그대로 읽는다 — 넣으나 빼나 결과가 같다.
 
 - [ ] **Step 8: 커밋**
 
@@ -279,8 +309,18 @@ git add apps/web pnpm-lock.yaml
 git commit -F - <<'EOF'
 web: 앱 뼈대 — 세 패키지가 화면 쪽에서 이어진다
 
-@keel/dsl·graph·renderer 는 빌드 없이 생 .ts 를 내보내므로 Next 의
-transpilePackages 에 셋을 적어야 한다. 빼고 빌드해 지는 것을 확인했다.
+@keel/dsl·graph·renderer 는 빌드 없이 생 .ts 를 내보내고 상대 경로를 ./cull.js
+처럼 적는다. Turbopack 이 그것을 cull.ts 로 바꿔 찾으려면 moduleResolution 이
+nodenext 여야 한다 — 공유 프리셋의 bundler 로 두면 renderer 의 재수출 전부가
+"모듈을 못 찾는다" 로 빌드를 깬다. 두 줄을 지워 지는 것을 확인했다.
+
+transpilePackages 는 필요 없었다. 넣으나 빼나 빌드가 같으므로 next.config.ts 는
+비워 두고 왜 비었는지를 거기 적었다. 안 쓰는 설정을 "이게 없으면 안 된다" 는
+주석과 함께 두는 것이 더 나쁘다.
+
+tsconfig 의 include 에 *.ts 를 넣지 않는다. 넣으면 next.config.ts 와
+vitest.config.ts 가 이 프로젝트에도 들고 공유 eslint 프리셋의
+allowDefaultProject 에도 들어, typescript-eslint 가 파싱을 거부한다.
 
 첫 검사는 세 패키지를 그대로 불러 장면을 세우는 것 하나다. 이어지지 않으면
 화면을 만들 것도 없으므로 가장 먼저 묶는다.
