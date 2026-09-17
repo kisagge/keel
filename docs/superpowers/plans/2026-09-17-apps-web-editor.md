@@ -207,12 +207,22 @@ export default defineConfig({
 });
 ```
 
-`apps/web/next-env.d.ts`:
+`apps/web/next-env.d.ts` — 두 줄로 만들어 두되 **글자를 붙들지 않는다.**
 
 ```ts
 /// <reference types="next" />
 /// <reference types="next/image-types/global" />
 ```
+
+이 파일은 **Next 가 관리한다.** `next build`/`next dev` 가 처음 돌 때 타입 있는
+라우트를 가리키는 줄과 "편집하지 말라" 는 주석을 스스로 덧붙인다. 커밋에는
+**빌드를 한 번 돌린 뒤의 내용**을 넣는다 — 두 줄짜리를 커밋하면 빌드를 돌릴
+때마다 워킹 트리가 더러워진다.
+
+덧붙는 줄이 `./.next/types/...` 를 가리키는데 `.next/` 는 무시되는 폴더라 새로
+받은 저장소에는 그 파일이 없다. 그래도 `tsc` 는 안 깨진다 — 부수 효과만 있는
+import 는 `noUncheckedSideEffectImports` 를 켜야 못 찾는 것을 문제 삼고, 이
+저장소는 안 켜 두었다. `.next/` 를 지우고 `pnpm typecheck` 를 돌려 확인했다.
 
 - [ ] **Step 4: 화면 뼈대 셋을 쓴다**
 
