@@ -1,0 +1,14 @@
+service gateway
+
+group cloud "클라우드" {
+  service lb "로드밸런서"
+
+  group core "코어" {
+    service api
+    db main "주 데이터베이스"
+  }
+}
+
+gateway -> lb
+lb -> api
+api -> main

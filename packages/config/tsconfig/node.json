@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+
+    /**
+     * NestJS 는 데코레이터와 그 메타데이터로 의존성을 주입한다.
+     * 이 둘이 없으면 @Injectable() 이 아무것도 안 하고, 런타임에
+     * "Nest can't resolve dependencies" 만 보게 된다.
+     */
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+
+    /** 데코레이터 메타데이터는 타입을 지우지 않고 읽어야 한다 */
+    "verbatimModuleSyntax": false
+  }
+}
