@@ -51,10 +51,15 @@ export function createKeelDocument(
   /**
    * 둘을 **함께** 감싼다. 친 글자와 끈 노드가 한 역사여야 사람이 "방금 뭘
    * 되돌렸는지" 를 따라갈 수 있다.
+   *
+   * `captureTimeout` 은 **건드리지 않는다.** 기본값(500ms)이 짧은 사이의
+   * 수정을 한 걸음으로 묶어 주는데, 글자를 칠 때는 그게 맞다 — 0 으로 두면
+   * `Cmd+Z` 가 한 자씩 지워 편집기로 쓸 수 없게 된다. 걸음의 경계가 필요한
+   * 자리(캔버스 조작 하나가 끝나는 곳)에서는 시간을 줄이는 대신
+   * `undoManager.stopCapturing()` 을 부른다. `commands.ts` 가 그렇게 한다.
    */
   const undoManager = new Y.UndoManager([source, layout], {
     trackedOrigins: new Set<unknown>([KEEL_LOCAL, ...extraTrackedOrigins]),
-    captureTimeout: 0,
   });
 
   return {

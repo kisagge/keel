@@ -51,16 +51,42 @@ describe('문서 배선', () => {
   /**
    * 역사가 둘로 나뉘면 사람이 "방금 뭘 되돌렸는지" 를 못 따라간다.
    * 친 글자와 끈 노드가 한 역사여야 한다.
+   *
+   * **`stopCapturing()` 이 걸음의 경계다.** Yjs 는 짧은 사이에 일어난 수정을
+   * 한 걸음으로 묶는다(기본 500ms) — 글자를 칠 때는 그게 맞다. 대신 캔버스
+   * 조작처럼 "한 번의 행동" 이 끝난 자리에서는 경계를 그어 준다.
+   * `commands.ts` 가 명령마다 이것을 부른다.
    */
   it('텍스트와 레이아웃이 한 역사로 되돌아간다', () => {
     const document = createKeelDocument('service a');
 
     document.doc.transact(() => document.source.insert(9, ' "하나"'), KEEL_LOCAL);
+    document.undoManager.stopCapturing();
     document.doc.transact(() => document.layout.set('a', { x: 1, y: 2 }), KEEL_LOCAL);
 
     document.undoManager.undo();
     expect(document.layout.get('a')).toBeUndefined();
     expect(document.source.toString()).toBe('service a "하나"');
+
+    document.undoManager.undo();
+    expect(document.source.toString()).toBe('service a');
+    document.destroy();
+  });
+
+  /**
+   * 반대쪽도 묶어 둔다 — **빠르게 친 글자는 한 걸음으로 합쳐져야 한다.**
+   *
+   * `captureTimeout: 0` 을 주면 이 검사가 진다. 그 값이면 `Cmd+Z` 가 글자를
+   * 한 자씩 지워, 편집기로 쓸 수 없는 물건이 된다. 경계를 세우고 싶으면
+   * 시간을 0 으로 만드는 게 아니라 `stopCapturing()` 을 부른다.
+   */
+  it('빠르게 친 글자는 한 걸음으로 묶인다', () => {
+    const document = createKeelDocument('service a');
+
+    for (const ch of ' "이름"') {
+      document.doc.transact(() => document.source.insert(document.source.length, ch), KEEL_LOCAL);
+    }
+    expect(document.source.toString()).toBe('service a "이름"');
 
     document.undoManager.undo();
     expect(document.source.toString()).toBe('service a');
