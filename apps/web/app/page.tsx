@@ -1,13 +1,17 @@
 'use client';
 
-import { DEFAULT_THEME } from '@keel/renderer';
+import { useEffect, useMemo } from 'react';
+import { CanvasPane } from '../src/components/canvas-pane.js';
+import { createKeelDocument } from '../src/document/keel-document.js';
+import { SEED } from '../src/document/seed.js';
 
 export default function EditorPage() {
+  const document = useMemo(() => createKeelDocument(SEED), []);
+  useEffect(() => () => document.destroy(), [document]);
+
   return (
-    <main style={{ height: '100%', display: 'grid', placeItems: 'center' }}>
-      <p style={{ color: DEFAULT_THEME.colors.mutedText }}>
-        KEEL — 노드 높이 {DEFAULT_THEME.node.height}
-      </p>
+    <main style={{ height: '100%' }}>
+      <CanvasPane document={document} />
     </main>
   );
 }
