@@ -622,7 +622,7 @@ EOF
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { KEEL_LOCAL, createKeelDocument } from '../src/document/keel-document.js';
+import { KEEL_LOCAL, KEEL_SEED, createKeelDocument } from '../src/document/keel-document.js';
 
 describe('문서 배선', () => {
   it('씨앗을 소스에 넣고 시작한다', () => {
@@ -645,6 +645,21 @@ describe('문서 배선', () => {
     const document = createKeelDocument('service a');
     document.undoManager.undo();
     expect(document.source.toString()).toBe('service a');
+    document.destroy();
+  });
+
+  /**
+   * 위 검사는 **순서**가 지켜 준다 — 씨앗이 `UndoManager` 보다 먼저 들어간다.
+   * origin 을 따로 둔 값은 여기서 나온다: 이미 살아 있는 되돌리기 옆에 얹어도
+   * 안 되돌아가야 한다. 서버에서 받은 문서를 얹을 때가 그 자리다.
+   */
+  it('되돌리기가 살아 있는 동안 넣은 것도 KEEL_SEED 면 안 되돌아간다', () => {
+    const document = createKeelDocument('service a');
+
+    document.doc.transact(() => document.source.insert(9, ' "나중"'), KEEL_SEED);
+    document.undoManager.undo();
+
+    expect(document.source.toString()).toBe('service a "나중"');
     document.destroy();
   });
 
@@ -772,10 +787,17 @@ import * as Y from 'yjs';
 export const KEEL_LOCAL = Symbol('keel-local');
 
 /**
- * 씨앗을 넣을 때 쓰는 origin. **일부러 추적하지 않는다** —
- * 되돌릴 수 있게 두면 화면을 열자마자 Cmd+Z 한 번에 문서가 통째로 사라진다.
+ * 씨앗처럼 **사람이 한 일이 아닌** 수정의 origin. 되돌리기가 추적하지 않는다.
+ *
+ * 지금 화면을 열자마자 `Cmd+Z` 로 문서가 사라지지 않는 것은 사실 **순서**가
+ * 지켜 준다 — 씨앗이 `UndoManager` 보다 먼저 들어가서 되돌리기가 그 트랜잭션을
+ * 아예 못 본다. 그러니 이 origin 은 지금 하는 일이 없다.
+ *
+ * 그래도 두는 이유는 곧 할 일이 생기기 때문이다. 서버가 붙으면 **이미 살아
+ * 있는 되돌리기 옆에** 받아 온 문서를 얹게 되고, 그때는 origin 말고는 "이건
+ * 사람이 한 게 아니다" 를 말할 방법이 없다. 그 자리를 검사로 미리 묶어 두었다.
  */
-const KEEL_SEED = Symbol('keel-seed');
+export const KEEL_SEED = Symbol('keel-seed');
 
 export interface KeelDocument {
   readonly doc: Y.Doc;
@@ -833,11 +855,15 @@ export function createKeelDocument(
 - [ ] **Step 4: 검사를 돌려 통과하는 것을 본다**
 
 Run: `cd apps/web && npx vitest run test/keel-document.test.ts`
-Expected: PASS (8 tests)
+Expected: PASS (10 tests)
 
 - [ ] **Step 5: 검사가 실제로 무는지 확인한다**
 
-1. 씨앗의 origin 을 `KEEL_SEED` 대신 `KEEL_LOCAL` 로 바꾼다 → `씨앗은 되돌려지지 않는다` 가 져야 한다
+1. `trackedOrigins` 에 `KEEL_SEED` 를 더한다 → `되돌리기가 살아 있는 동안 넣은 것도 KEEL_SEED 면 안 되돌아간다` 가 져야 한다
+
+   (씨앗의 origin 만 `KEEL_LOCAL` 로 바꾸는 것은 **안 문다** — 씨앗이 `UndoManager`
+   보다 먼저 들어가 origin 과 무관하게 안 되돌아간다. 처음에 그렇게 적어 두었다가
+   구현자가 안 문다고 알려 와서 고쳤다.)
 2. `new Y.UndoManager([source, layout], …)` 를 `new Y.UndoManager(source, …)` 로 바꾼다 → 레이아웃 되돌리기 검사 둘이 져야 한다
 3. `captureTimeout: 0` 을 넣어 본다 → `빠르게 친 글자는 한 걸음으로 묶인다` 가 져야 한다 (글자가 한 자씩 되돌아간다)
 
@@ -857,9 +883,14 @@ Y.Text('source') 가 문서이고 Y.Map('layout') 에는 사람이 옮긴 노드
 (UndoManager.js:216) 화면 쪽이 YSyncConfig 클래스를 넘겨 주면 이 파일은
 CodeMirror 을 몰라도 된다.
 
-씨앗은 일부러 추적하지 않는 origin 으로 넣는다. 되돌릴 수 있게 두면 화면을
-열자마자 Cmd+Z 한 번에 문서가 통째로 사라진다. 씨앗 origin 을 KEEL_LOCAL 로
-바꿔 검사가 지는 것을 확인했다.
+씨앗은 추적하지 않는 origin 으로 넣는다. 다만 지금 Cmd+Z 로 문서가 안 사라지는
+것은 사실 순서가 지켜 준다 — 씨앗이 UndoManager 보다 먼저 들어가 되돌리기가 그
+트랜잭션을 못 본다. origin 은 지금 하는 일이 없다.
+
+그래도 두는 이유는 서버가 붙으면 이미 살아 있는 되돌리기 옆에 받아 온 문서를
+얹게 되고, 그때는 origin 말고 "사람이 한 게 아니다" 를 말할 방법이 없기
+때문이다. 그 자리를 검사로 미리 묶었다 — trackedOrigins 에 KEEL_SEED 를 더해
+검사가 지는 것을 확인했다.
 
 captureTimeout 은 건드리지 않는다. 기본값이 짧은 사이의 수정을 한 걸음으로
 묶어 주는데 글자를 칠 때는 그게 맞다 — 0 으로 두면 Cmd+Z 가 한 자씩 지워
