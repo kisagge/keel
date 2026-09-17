@@ -673,16 +673,42 @@ describe('문서 배선', () => {
   /**
    * 역사가 둘로 나뉘면 사람이 "방금 뭘 되돌렸는지" 를 못 따라간다.
    * 친 글자와 끈 노드가 한 역사여야 한다.
+   *
+   * **`stopCapturing()` 이 걸음의 경계다.** Yjs 는 짧은 사이에 일어난 수정을
+   * 한 걸음으로 묶는다(기본 500ms) — 글자를 칠 때는 그게 맞다. 대신 캔버스
+   * 조작처럼 "한 번의 행동" 이 끝난 자리에서는 경계를 그어 준다.
+   * `commands.ts` 가 명령마다 이것을 부른다.
    */
   it('텍스트와 레이아웃이 한 역사로 되돌아간다', () => {
     const document = createKeelDocument('service a');
 
     document.doc.transact(() => document.source.insert(9, ' "하나"'), KEEL_LOCAL);
+    document.undoManager.stopCapturing();
     document.doc.transact(() => document.layout.set('a', { x: 1, y: 2 }), KEEL_LOCAL);
 
     document.undoManager.undo();
     expect(document.layout.get('a')).toBeUndefined();
     expect(document.source.toString()).toBe('service a "하나"');
+
+    document.undoManager.undo();
+    expect(document.source.toString()).toBe('service a');
+    document.destroy();
+  });
+
+  /**
+   * 반대쪽도 묶어 둔다 — **빠르게 친 글자는 한 걸음으로 합쳐져야 한다.**
+   *
+   * `captureTimeout: 0` 을 주면 이 검사가 진다. 그 값이면 `Cmd+Z` 가 글자를
+   * 한 자씩 지워, 편집기로 쓸 수 없는 물건이 된다. 경계를 세우고 싶으면
+   * 시간을 0 으로 만드는 게 아니라 `stopCapturing()` 을 부른다.
+   */
+  it('빠르게 친 글자는 한 걸음으로 묶인다', () => {
+    const document = createKeelDocument('service a');
+
+    for (const ch of ' "이름"') {
+      document.doc.transact(() => document.source.insert(document.source.length, ch), KEEL_LOCAL);
+    }
+    expect(document.source.toString()).toBe('service a "이름"');
 
     document.undoManager.undo();
     expect(document.source.toString()).toBe('service a');
@@ -780,6 +806,12 @@ export function createKeelDocument(
   /**
    * 둘을 **함께** 감싼다. 친 글자와 끈 노드가 한 역사여야 사람이 "방금 뭘
    * 되돌렸는지" 를 따라갈 수 있다.
+   *
+   * `captureTimeout` 은 **건드리지 않는다.** 기본값(500ms)이 짧은 사이의
+   * 수정을 한 걸음으로 묶어 주는데, 글자를 칠 때는 그게 맞다 — 0 으로 두면
+   * `Cmd+Z` 가 한 자씩 지워 편집기로 쓸 수 없게 된다. 걸음의 경계가 필요한
+   * 자리(캔버스 조작 하나가 끝나는 곳)에서는 시간을 줄이는 대신
+   * `undoManager.stopCapturing()` 을 부른다. `commands.ts` 가 그렇게 한다.
    */
   const undoManager = new Y.UndoManager([source, layout], {
     trackedOrigins: new Set<unknown>([KEEL_LOCAL, ...extraTrackedOrigins]),
@@ -807,6 +839,7 @@ Expected: PASS (8 tests)
 
 1. 씨앗의 origin 을 `KEEL_SEED` 대신 `KEEL_LOCAL` 로 바꾼다 → `씨앗은 되돌려지지 않는다` 가 져야 한다
 2. `new Y.UndoManager([source, layout], …)` 를 `new Y.UndoManager(source, …)` 로 바꾼다 → 레이아웃 되돌리기 검사 둘이 져야 한다
+3. `captureTimeout: 0` 을 넣어 본다 → `빠르게 친 글자는 한 걸음으로 묶인다` 가 져야 한다 (글자가 한 자씩 되돌아간다)
 
 Expected: 각각 FAIL. 확인 후 되돌린다.
 
@@ -827,6 +860,11 @@ CodeMirror 을 몰라도 된다.
 씨앗은 일부러 추적하지 않는 origin 으로 넣는다. 되돌릴 수 있게 두면 화면을
 열자마자 Cmd+Z 한 번에 문서가 통째로 사라진다. 씨앗 origin 을 KEEL_LOCAL 로
 바꿔 검사가 지는 것을 확인했다.
+
+captureTimeout 은 건드리지 않는다. 기본값이 짧은 사이의 수정을 한 걸음으로
+묶어 주는데 글자를 칠 때는 그게 맞다 — 0 으로 두면 Cmd+Z 가 한 자씩 지워
+편집기로 쓸 수 없게 된다. 넣어 보고 검사가 지는 것을 확인했다. 걸음의 경계는
+시간이 아니라 stopCapturing() 으로 긋는다.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
@@ -975,6 +1013,27 @@ describe('지우기', () => {
   });
 });
 
+describe('되돌리기 걸음', () => {
+  /**
+   * 명령 하나가 한 걸음이어야 한다. 경계를 안 그으면 Yjs 가 짧은 사이의 수정을
+   * 묶어, 이름을 고치고 곧바로 노드를 끌었을 때 Cmd+Z 한 번에 둘 다 되돌아간다.
+   */
+  it('잇달아 한 명령 둘이 따로 되돌아간다', () => {
+    const document = createKeelDocument(SOURCE);
+
+    renameNode(document, 'api', '주문 API');
+    moveNode(document, 'api', { x: 10, y: 20 });
+
+    document.undoManager.undo();
+    expect(document.layout.get('api')).toBeUndefined();
+    expect(document.source.toString()).toContain('service api "주문 API"');
+
+    document.undoManager.undo();
+    expect(document.source.toString()).toBe(SOURCE);
+    document.destroy();
+  });
+});
+
 describe('옮기기', () => {
   it('좌표만 쓰고 텍스트는 안 건드린다', () => {
     const document = createKeelDocument(SOURCE);
@@ -1034,10 +1093,24 @@ function meaningful(source: string, edits: readonly TextEdit[]): TextEdit[] {
   return edits.filter((edit) => source.slice(edit.from, edit.to) !== edit.insert);
 }
 
+/**
+ * 명령 하나는 **되돌리기 한 걸음**이다.
+ *
+ * Yjs 는 짧은 사이에 일어난 수정을 한 걸음으로 묶는다(기본 500ms). 글자를 칠
+ * 때는 그게 맞지만, 캔버스 조작은 한 번이 한 행동이다 — 이름을 고치고 곧바로
+ * 노드를 끌면 `Cmd+Z` 한 번에 둘 다 되돌아가 버린다. 그래서 명령을 얹기 전에
+ * 경계를 긋는다.
+ */
+function beginStep(document: KeelDocument): void {
+  document.undoManager.stopCapturing();
+}
+
 function editText(document: KeelDocument, plan: (doc: ParsedDocument) => TextEdit[]): void {
   const source = document.source.toString();
   const edits = meaningful(source, plan(parse(source)));
   if (edits.length === 0) return;
+
+  beginStep(document);
   document.doc.transact(() => applyTextEdits(document.source, edits), KEEL_LOCAL);
 }
 
@@ -1069,6 +1142,7 @@ export function removeNode(document: KeelDocument, id: string): void {
   const hadPlace = document.layout.has(id);
   if (edits.length === 0 && !hadPlace) return;
 
+  beginStep(document);
   document.doc.transact(() => {
     applyTextEdits(document.source, edits);
     document.layout.delete(id);
@@ -1082,6 +1156,7 @@ export function removeNode(document: KeelDocument, id: string): void {
  * 손대면 렌더러의 "중심이 레이아웃에 적힌 값과 정확히 같다" 계약이 깨진다.
  */
 export function moveNode(document: KeelDocument, id: string, at: Point): void {
+  beginStep(document);
   document.doc.transact(() => document.layout.set(id, at), KEEL_LOCAL);
 }
 ```
@@ -1095,6 +1170,7 @@ Expected: PASS (11 tests)
 
 1. `removeNode` 에서 `document.layout.delete(id)` 줄을 지운다 → 레이아웃 검사 둘이 져야 한다
 2. `editText` 의 `meaningful(...)` 을 걷어 내고 `plan(...)` 을 그대로 쓴다 → `바뀔 것이 없으면 트랜잭션을 안 연다` 가 져야 한다 (같은 이름으로 고치는 줄에서 진다)
+3. `beginStep` 호출 셋을 지운다 → `잇달아 한 명령 둘이 따로 되돌아간다` 가 져야 한다
 
 Expected: 각각 FAIL. 확인 후 되돌린다.
 
@@ -1114,6 +1190,11 @@ web: 캔버스 조작이 텍스트의 그 줄만 고친다
 
 바뀔 것이 없으면 트랜잭션을 아예 안 연다. 빈 트랜잭션은 되돌리기 역사에 빈
 칸을 남겨, Cmd+Z 를 눌렀는데 아무 일도 안 일어나게 만든다.
+
+명령 하나는 되돌리기 한 걸음이다. Yjs 는 짧은 사이의 수정을 한 걸음으로
+묶는데 글자를 칠 때는 그게 맞지만 캔버스 조작은 한 번이 한 행동이라, 얹기 전에
+stopCapturing() 으로 경계를 긋는다. 안 그으면 이름을 고치고 곧바로 노드를 끌
+때 Cmd+Z 한 번에 둘 다 되돌아간다. 호출을 지워 검사가 지는 것을 확인했다.
 
 옮기기는 받은 값을 그대로 적는다. 반올림은 끄는 쪽의 일이고, 여기서 손대면
 렌더러의 "중심이 레이아웃에 적힌 값과 정확히 같다" 계약이 깨진다.
