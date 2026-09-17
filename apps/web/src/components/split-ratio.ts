@@ -60,9 +60,13 @@ export function saveRatio(ratio: number): void {
  *
  * 끌고 있는 값은 아직 `localStorage` 에 적지 않은 값이다(놓아야
  * `saveRatio` 로 적힌다) — 그래도 `getRatio` 는 이 값을 돌려줘야 손잡이가
- * 끄는 대로 따라온다. `localStorage` 를 매번 다시 읽으면 그 값을 잃어버리고,
- * `getSnapshot` 이 호출마다 다른 참조를 돌려주는 꼴이 되어
- * `useSyncExternalStore` 가 매 렌더 다시 구독하려 든다.
+ * 끄는 대로 따라온다. `localStorage` 를 매번 다시 읽으면 그 값을 잃는다.
+ *
+ * 값을 여기 붙들어 두는 두 번째 이유는 `getSnapshot` 이 **호출마다 같은 값을
+ * 돌려줘야** 하기 때문이다. 다르면 React 가 렌더 뒤 다시 읽어 또 달라진 것을
+ * 보고 계속 다시 그린다 — 무한 렌더가 되고 "the result of getSnapshot should
+ * be cached" 경고가 뜬다. (다시 *구독*하는 것과는 상관없다. `subscribe` 는 그
+ * 함수의 참조가 바뀔 때만 다시 불린다.)
  */
 let current: number | undefined;
 const listeners = new Set<() => void>();
