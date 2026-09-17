@@ -67,3 +67,5 @@ export { edgeTextStyle, placeEdges, selfLoopPath } from './edges.js';
 export type { ArrowHead, PlacedEdge } from './edges.js';
 export { countVisible, cullScene } from './cull.js';
 export type { VisibleScene } from './cull.js';
+export { HIT_ORDER, buildSpatialIndex, hitTest, hitTestAll } from './hit-test.js';
+export type { Hit, HitOptions, SpatialIndex } from './hit-test.js';

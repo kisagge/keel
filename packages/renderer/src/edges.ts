@@ -54,6 +54,8 @@ export interface PlacedEdge {
   readonly labelAnchor: Point | undefined;
   /** 라벨 폭에 맞춰 잘린 글자 */
   readonly labelText: string | undefined;
+  /** 라벨이 실제로 차지하는 상자. 히트테스트가 라벨을 집을 때 본다 */
+  readonly labelRect: Rect | undefined;
   /** 화살촉과 라벨까지 감싼 상자. 컬링과 격자 색인이 이것을 본다 */
   readonly bounds: Rect;
 }
@@ -208,13 +210,16 @@ function finish(
 
   const labelAnchor = labelText === undefined ? undefined : labelAnchorOf(path, theme);
 
+  const labelRect =
+    labelAnchor === undefined || labelText === undefined
+      ? undefined
+      : labelBounds(labelAnchor, labelText, theme, measure);
+
   const points = [...path];
   if (arrow) points.push(arrow.tip, arrow.left, arrow.right);
 
   let bounds = boundsOfPoints(points) ?? EMPTY_RECT;
-  if (labelAnchor !== undefined && labelText !== undefined) {
-    bounds = rectUnion(bounds, labelBounds(labelAnchor, labelText, theme, measure));
-  }
+  if (labelRect !== undefined) bounds = rectUnion(bounds, labelRect);
 
   return {
     key: edge.key,
@@ -224,6 +229,7 @@ function finish(
     arrow,
     labelAnchor,
     labelText,
+    labelRect,
     bounds: inflateRect(bounds, theme.edge.width),
   };
 }
