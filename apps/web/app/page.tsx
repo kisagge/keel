@@ -1,13 +1,17 @@
 'use client';
 
+import type { EditorView } from '@codemirror/view';
 import type { Hit } from '@keel/renderer';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { YSyncConfig } from 'y-codemirror.next';
 import { CanvasPane } from '../src/components/canvas-pane.js';
+import { DiagnosticsList } from '../src/components/diagnostics.js';
+import { EditorPane } from '../src/components/editor-pane.js';
+import { parseSource } from '../src/document/derive.js';
 import { createKeelDocument } from '../src/document/keel-document.js';
+import { useKeelDocument } from '../src/hooks/use-keel-document.js';
 import { SEED } from '../src/document/seed.js';
 
-/** 고른 것의 id. 노드·그룹 id 와 엣지 key 를 한 자루에 담아도 안전하다 —
- *  파서가 duplicate-id 를 잡아 둘이 안 겹치고, 엣지 key 에는 빈칸이 들어 있다 */
 function idOf(hit: Hit | undefined): string | undefined {
   if (hit === undefined) return undefined;
   if (hit.kind === 'node') return hit.node.id;
@@ -16,7 +20,12 @@ function idOf(hit: Hit | undefined): string | undefined {
 }
 
 export default function EditorPage() {
-  const document = useMemo(() => createKeelDocument(SEED), []);
+  /**
+   * `YSyncConfig` 를 넘기는 것이 핵심이다. CodeMirror 의 로컬 편집은 그 클래스의
+   * 인스턴스를 origin 으로 쓰고, Yjs 는 origin 을 생성자로도 견주므로 클래스만
+   * 넣어 두면 인스턴스를 손에 안 쥐어도 되돌리기에 걸린다.
+   */
+  const document = useMemo(() => createKeelDocument(SEED, [YSyncConfig]), []);
   /**
    * **문서를 정리하지 않는다.**
    *
@@ -35,17 +44,40 @@ export default function EditorPage() {
    * 문서를 효과 안에서 만들어 만듦과 지움을 짝지어야 한다.
    */
 
+  const source = useKeelDocument(document);
+  const { document: parsed } = useMemo(() => parseSource(source), [source]);
+
+  const viewRef = useRef<EditorView | null>(null);
+  const goTo = useCallback((position: number) => {
+    const view = viewRef.current;
+    if (view === null) return;
+    view.dispatch({ selection: { anchor: position }, scrollIntoView: true });
+    view.focus();
+  }, []);
+
   const [selectedHit, setSelectedHit] = useState<Hit | undefined>(undefined);
   const selection = useMemo(() => {
     const id = idOf(selectedHit);
     return new Set<string>(id === undefined ? [] : [id]);
   }, [selectedHit]);
 
-  const onSelect = useCallback((hit: Hit | undefined) => setSelectedHit(hit), []);
-
   return (
-    <main style={{ height: '100%' }}>
-      <CanvasPane document={document} selection={selection} onSelect={onSelect} />
+    <main style={{ height: '100%', display: 'grid', gridTemplateColumns: '40% 1fr' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateRows: '1fr auto',
+          borderRight: '1px solid var(--keel-border)',
+          minHeight: 0,
+        }}
+      >
+        <EditorPane document={document} viewRef={viewRef} />
+        <div style={{ borderTop: '1px solid var(--keel-border)', maxHeight: 160, minHeight: 0 }}>
+          <DiagnosticsList diagnostics={parsed.diagnostics} onGoTo={goTo} />
+        </div>
+      </div>
+
+      <CanvasPane document={document} selection={selection} onSelect={setSelectedHit} />
     </main>
   );
 }
