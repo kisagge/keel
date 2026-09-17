@@ -1,25 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useSyncExternalStore } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
-import { DEFAULT_RATIO, clampRatio, loadRatio, saveRatio } from './split-ratio.js';
+import { getRatio, getServerRatio, saveRatio, setRatio, subscribeRatio } from './split-ratio.js';
 
 /**
  * 좌우 분할. 비율을 다루는 부분은 `split-ratio.ts` 에 있다.
  */
 export function Split({ left, right }: { readonly left: ReactNode; readonly right: ReactNode }) {
   /**
-   * 서버에서는 localStorage 가 없다. 첫 그리기는 기본값으로 하고 뒤에 맞춘다.
-   *
-   * rAF 로 한 틀 늦춰 부른다 — effect 몸통에서 곧바로 `setRatio` 를 부르면
-   * 린터가 "동기 setState" 로 잡는다(진짜 문제는, 첫 그리기와 하이드레이션이
-   * 서버와 같은 기본값을 봐야 어긋나지 않는다는 것이라 지연 자체가 목적이다).
+   * `localStorage` 는 React 밖의 저장소라 `useSyncExternalStore` 가 정식
+   * 통로다 — 이유는 `split-ratio.ts` 위쪽 주석에 적었다.
    */
-  const [ratio, setRatio] = useState(DEFAULT_RATIO);
-  useEffect(() => {
-    const id = window.requestAnimationFrame(() => setRatio(loadRatio()));
-    return () => window.cancelAnimationFrame(id);
-  }, []);
+  const ratio = useSyncExternalStore(subscribeRatio, getRatio, getServerRatio);
 
   const host = useRef<HTMLDivElement | null>(null);
   const dragging = useRef(false);
@@ -33,17 +26,14 @@ export function Split({ left, right }: { readonly left: ReactNode; readonly righ
     if (!dragging.current) return;
     const rect = host.current?.getBoundingClientRect();
     if (rect === undefined || rect.width === 0) return;
-    setRatio(clampRatio((e.clientX - rect.left) / rect.width));
+    setRatio((e.clientX - rect.left) / rect.width);
   }, []);
 
-  const onPointerUp = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-      dragging.current = false;
-      saveRatio(ratio);
-    },
-    [ratio],
-  );
+  const onPointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    dragging.current = false;
+    saveRatio(getRatio());
+  }, []);
 
   return (
     <div
@@ -67,10 +57,10 @@ export function Split({ left, right }: { readonly left: ReactNode; readonly righ
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onKeyDown={(e) => {
-          if (e.key === 'ArrowLeft') setRatio((r) => clampRatio(r - 0.02));
-          if (e.key === 'ArrowRight') setRatio((r) => clampRatio(r + 0.02));
+          if (e.key === 'ArrowLeft') setRatio(getRatio() - 0.02);
+          if (e.key === 'ArrowRight') setRatio(getRatio() + 0.02);
         }}
-        onBlur={() => saveRatio(ratio)}
+        onBlur={() => saveRatio(getRatio())}
         style={{
           cursor: 'col-resize',
           background: 'var(--keel-border)',
