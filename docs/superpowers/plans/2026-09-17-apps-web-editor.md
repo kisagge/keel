@@ -775,7 +775,12 @@ describe('이름 고치기', () => {
     document.destroy();
   });
 
-  /** 빈 트랜잭션은 되돌리기 역사에 빈 칸을 남긴다 */
+  /**
+   * 빈 트랜잭션은 되돌리기 역사에 빈 칸을 남긴다.
+   *
+   * **같은 이름으로 고치는 경우가 핵심이다.** `planSetNodeLabel` 은 그때 빈
+   * 배열이 아니라 같은 글자를 다시 쓰는 수정을 돌려주므로, 명령 쪽에서 걸러야 한다.
+   */
   it('바뀔 것이 없으면 트랜잭션을 안 연다', () => {
     const document = createKeelDocument(SOURCE);
 
@@ -897,8 +902,20 @@ import { applyTextEdits } from './text-edits.js';
  * 칸을 남겨, Cmd+Z 를 눌렀는데 아무 일도 안 일어나게 만든다.
  */
 
+/**
+ * 바뀌는 것이 없는 수정은 버린다.
+ *
+ * `planSetNodeLabel` 은 **같은 라벨로 고쳐도 빈 배열을 안 준다** — 같은 글자를
+ * 다시 쓰는 수정을 준다(`planSetNodeKind` 는 `[]` 를 준다). 그대로 얹으면
+ * 되돌리기 역사에 빈 칸이 생기고, 남의 화면에는 아무것도 안 바뀐 갱신이 날아간다.
+ */
+function meaningful(source: string, edits: readonly TextEdit[]): TextEdit[] {
+  return edits.filter((edit) => source.slice(edit.from, edit.to) !== edit.insert);
+}
+
 function editText(document: KeelDocument, plan: (doc: ParsedDocument) => TextEdit[]): void {
-  const edits = plan(parse(document.source.toString()));
+  const source = document.source.toString();
+  const edits = meaningful(source, plan(parse(source)));
   if (edits.length === 0) return;
   document.doc.transact(() => applyTextEdits(document.source, edits), KEEL_LOCAL);
 }
@@ -926,7 +943,8 @@ export function setNodeKind(document: KeelDocument, id: string, kind: NodeKind):
  * 한 번에 글과 자리가 함께 돌아온다.
  */
 export function removeNode(document: KeelDocument, id: string): void {
-  const edits = planRemoveNode(parse(document.source.toString()), id);
+  const source = document.source.toString();
+  const edits = meaningful(source, planRemoveNode(parse(source), id));
   const hadPlace = document.layout.has(id);
   if (edits.length === 0 && !hadPlace) return;
 
@@ -955,7 +973,7 @@ Expected: PASS (11 tests)
 - [ ] **Step 5: 검사가 실제로 무는지 확인한다**
 
 1. `removeNode` 에서 `document.layout.delete(id)` 줄을 지운다 → 레이아웃 검사 둘이 져야 한다
-2. `editText` 의 `if (edits.length === 0) return;` 을 지운다 → `바뀔 것이 없으면 트랜잭션을 안 연다` 가 져야 한다
+2. `editText` 의 `meaningful(...)` 을 걷어 내고 `plan(...)` 을 그대로 쓴다 → `바뀔 것이 없으면 트랜잭션을 안 연다` 가 져야 한다 (같은 이름으로 고치는 줄에서 진다)
 
 Expected: 각각 FAIL. 확인 후 되돌린다.
 
@@ -2020,6 +2038,7 @@ EOF
 **Files:**
 - Create: `apps/web/src/hooks/use-keel-document.ts`, `apps/web/src/hooks/use-canvas.ts`
 - Create: `apps/web/src/components/canvas-pane.tsx`
+- Create: `apps/web/src/document/seed.ts`
 - Modify: `apps/web/app/page.tsx` (전체 교체)
 
 **Interfaces:**
@@ -2086,6 +2105,7 @@ import {
 } from '@keel/renderer';
 import type { Ctx2D, Hit, Point, Scene, SpatialIndex, Viewport } from '@keel/renderer';
 import { useCallback, useEffect, useRef } from 'react';
+import type { RefObject } from 'react';
 
 /**
  * 캔버스를 쥔다 — 엘리먼트, 크기, RAF 루프, 뷰포트.
@@ -2108,7 +2128,7 @@ export interface UseCanvas {
   readonly canvasRef: (element: HTMLCanvasElement | null) => void;
   /** 다음 프레임에 한 번만 다시 그린다 */
   readonly invalidate: () => void;
-  readonly viewportRef: React.RefObject<Viewport>;
+  readonly viewportRef: RefObject<Viewport>;
   /** 화면 좌표를 월드 좌표로 */
   readonly toWorld: (screen: Point) => Point;
   /** 캔버스 안에서의 화면 좌표 */
@@ -2683,6 +2703,7 @@ import type { Diagnostic as CmDiagnostic } from '@codemirror/lint';
 import { EditorState } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { useEffect, useRef } from 'react';
+import type { RefObject } from 'react';
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
 import { parseSource } from '../document/derive.js';
 import type { KeelDocument } from '../document/keel-document.js';
@@ -2703,7 +2724,7 @@ export function EditorPane({
   viewRef,
 }: {
   readonly document: KeelDocument;
-  readonly viewRef: React.RefObject<EditorView | null>;
+  readonly viewRef: RefObject<EditorView | null>;
 }) {
   const host = useRef<HTMLDivElement | null>(null);
 
@@ -3610,7 +3631,7 @@ EOF
 ## Task 15: 분할 조절 · 키보드 · 맞춤 단추 · 캔버스가 없을 때
 
 **Files:**
-- Create: `apps/web/src/components/split.tsx`
+- Create: `apps/web/src/components/split-ratio.ts`, `apps/web/src/components/split.tsx`
 - Modify: `apps/web/src/components/canvas-pane.tsx`, `apps/web/app/page.tsx`
 - Create: `apps/web/test/split-ratio.test.ts`
 
@@ -3629,7 +3650,13 @@ EOF
 
 ```ts
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MAX_RATIO, MIN_RATIO, clampRatio, loadRatio, saveRatio } from '../src/components/split.js';
+import {
+  MAX_RATIO,
+  MIN_RATIO,
+  clampRatio,
+  loadRatio,
+  saveRatio,
+} from '../src/components/split-ratio.js';
 
 /** localStorage 가 없는 곳(서버·사생활 보호 창)에서도 돌아야 한다 */
 function fakeStorage(): Storage {
@@ -3704,24 +3731,21 @@ describe('비율 저장', () => {
 Run: `cd apps/web && npx vitest run test/split-ratio.test.ts`
 Expected: FAIL — 모듈을 찾을 수 없다
 
-- [ ] **Step 3: 분할 컴포넌트를 쓴다**
+- [ ] **Step 3: 비율 다루기를 순수 모듈로 쓴다**
 
-`apps/web/src/components/split.tsx`:
+`apps/web/src/components/split-ratio.ts`:
 
-```tsx
-'use client';
-
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
-
+```ts
 /**
- * 좌우 분할.
+ * 분할 비율을 다루는 순수한 부분.
+ *
+ * 컴포넌트에서 떼어 둔 이유는 이 저장소의 방식 그대로다 — **검사할 값어치가
+ * 있는 것은 순수 모듈로 내린다.** 물리기와 저장은 틀리기 쉬운데(사생활 보호
+ * 창에서는 `localStorage` 를 읽는 것만으로 던진다) 컴포넌트 안에 있으면
+ * jsdom 없이 검사할 방법이 없다.
  *
  * 비율은 `localStorage` 에 둔다. **문서가 아니라 보는 사람의 편의**이므로
  * `Y.Doc` 에 넣지 않는다 — 넣으면 내가 창을 넓힌 것이 남의 화면을 밀어 버린다.
- *
- * 읽기도 쓰기도 던질 수 있다(사생활 보호 창에서는 접근만으로 던진다). 편의를
- * 위한 값이므로 못 쓰면 조용히 기본값으로 간다.
  */
 
 const KEY = 'keel:split';
@@ -3736,6 +3760,7 @@ export function clampRatio(value: number): number {
   return Math.min(MAX_RATIO, Math.max(MIN_RATIO, value));
 }
 
+/** 못 읽으면 조용히 기본값으로 간다. 문서가 아니라 편의를 위한 값이다 */
 export function loadRatio(): number {
   try {
     const raw = localStorage.getItem(KEY);
@@ -3751,10 +3776,25 @@ export function saveRatio(ratio: number): void {
   try {
     localStorage.setItem(KEY, String(clampRatio(ratio)));
   } catch {
-    // 못 적으면 그만이다. 문서가 아니다
+    // 못 적으면 그만이다
   }
 }
+```
 
+- [ ] **Step 4: 분할 컴포넌트를 쓴다**
+
+`apps/web/src/components/split.tsx`:
+
+```tsx
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import { DEFAULT_RATIO, clampRatio, loadRatio, saveRatio } from './split-ratio.js';
+
+/**
+ * 좌우 분할. 비율을 다루는 부분은 `split-ratio.ts` 에 있다.
+ */
 export function Split({ left, right }: { readonly left: ReactNode; readonly right: ReactNode }) {
   // 서버에서는 localStorage 가 없다. 첫 그리기는 기본값으로 하고 뒤에 맞춘다
   const [ratio, setRatio] = useState(DEFAULT_RATIO);
@@ -3823,18 +3863,18 @@ export function Split({ left, right }: { readonly left: ReactNode; readonly righ
 }
 ```
 
-- [ ] **Step 4: 검사를 돌려 통과하는 것을 본다**
+- [ ] **Step 5: 검사를 돌려 통과하는 것을 본다**
 
 Run: `cd apps/web && npx vitest run test/split-ratio.test.ts`
 Expected: PASS (6 tests)
 
-- [ ] **Step 5: 검사가 실제로 무는지 확인한다**
+- [ ] **Step 6: 검사가 실제로 무는지 확인한다**
 
-`loadRatio` 의 `try`/`catch` 를 걷어 낸다 → `localStorage 가 던져도 화면이 안 죽는다` 가 져야 한다.
+`split-ratio.ts` 의 `loadRatio` 에서 `try`/`catch` 를 걷어 낸다 → `localStorage 가 던져도 화면이 안 죽는다` 가 져야 한다.
 
 Expected: FAIL. 확인 후 되돌린다.
 
-- [ ] **Step 6: 맞춤 단추와 캔버스가 없을 때의 안내를 더한다**
+- [ ] **Step 7: 맞춤 단추와 캔버스가 없을 때의 안내를 더한다**
 
 `canvas-pane.tsx` 의 `return` 을 바꾼다:
 
@@ -3888,7 +3928,7 @@ Expected: FAIL. 확인 후 되돌린다.
   );
 }
 
-const fitButton: React.CSSProperties = {
+const fitButton: CSSProperties = {
   position: 'absolute',
   right: 12,
   bottom: 12,
@@ -3904,7 +3944,7 @@ const fitButton: React.CSSProperties = {
 
 `useState` 를 import 에 더한다.
 
-- [ ] **Step 7: 키보드를 붙인다**
+- [ ] **Step 8: 키보드를 붙인다**
 
 `page.tsx` 에 더한다:
 
@@ -3979,12 +4019,12 @@ import 를 더한다: `import { removeNode } from '../src/document/commands.js';
 
 `Split` 의 오른쪽 칸이 이미 `position: relative` 이므로 인스펙터가 거기 얹힌다.
 
-- [ ] **Step 8: 타입·린트·검사를 확인한다**
+- [ ] **Step 9: 타입·린트·검사를 확인한다**
 
 Run: `cd /Users/kisagge/my-projects/keel && pnpm typecheck && pnpm lint && pnpm test && pnpm --filter @keel/e2e e2e`
 Expected: 전부 통과
 
-- [ ] **Step 9: 눈으로 확인한다**
+- [ ] **Step 10: 눈으로 확인한다**
 
 Run: `pnpm --filter @keel/web dev`
 Expected:
@@ -3994,7 +4034,7 @@ Expected:
 - **편집기 안에서 `Delete` 를 눌러도 노드가 안 지워진다** (글자만 지워진다)
 - 오른쪽 아래 `맞춤` 을 누르면 내용이 화면에 맞는다
 
-- [ ] **Step 10: 커밋**
+- [ ] **Step 11: 커밋**
 
 ```bash
 git add apps/web
