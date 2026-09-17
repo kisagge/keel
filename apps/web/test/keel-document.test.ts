@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-base-to-string */
 import { describe, expect, it } from 'vitest';
-import { KEEL_LOCAL, createKeelDocument } from '../src/document/keel-document.js';
+import { KEEL_LOCAL, KEEL_SEED, createKeelDocument } from '../src/document/keel-document.js';
 
 describe('문서 배선', () => {
   it('씨앗을 소스에 넣고 시작한다', () => {
@@ -23,6 +23,21 @@ describe('문서 배선', () => {
     const document = createKeelDocument('service a');
     document.undoManager.undo();
     expect(document.source.toString()).toBe('service a');
+    document.destroy();
+  });
+
+  /**
+   * 위 검사는 **순서**가 지켜 준다 — 씨앗이 `UndoManager` 보다 먼저 들어간다.
+   * origin 을 따로 둔 값은 여기서 나온다: 이미 살아 있는 되돌리기 옆에 얹어도
+   * 안 되돌아가야 한다. 서버에서 받은 문서를 얹을 때가 그 자리다.
+   */
+  it('되돌리기가 살아 있는 동안 넣은 것도 KEEL_SEED 면 안 되돌아간다', () => {
+    const document = createKeelDocument('service a');
+
+    document.doc.transact(() => document.source.insert(9, ' "나중"'), KEEL_SEED);
+    document.undoManager.undo();
+
+    expect(document.source.toString()).toBe('service a "나중"');
     document.destroy();
   });
 

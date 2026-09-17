@@ -17,10 +17,17 @@ import * as Y from 'yjs';
 export const KEEL_LOCAL = Symbol('keel-local');
 
 /**
- * 씨앗을 넣을 때 쓰는 origin. **일부러 추적하지 않는다** —
- * 되돌릴 수 있게 두면 화면을 열자마자 Cmd+Z 한 번에 문서가 통째로 사라진다.
+ * 씨앗처럼 **사람이 한 일이 아닌** 수정의 origin. 되돌리기가 추적하지 않는다.
+ *
+ * 지금 화면을 열자마자 `Cmd+Z` 로 문서가 사라지지 않는 것은 사실 **순서**가
+ * 지켜 준다 — 씨앗이 `UndoManager` 보다 먼저 들어가서 되돌리기가 그 트랜잭션을
+ * 아예 못 본다. 그러니 이 origin 은 지금 하는 일이 없다.
+ *
+ * 그래도 두는 이유는 곧 할 일이 생기기 때문이다. 서버가 붙으면 **이미 살아
+ * 있는 되돌리기 옆에** 받아 온 문서를 얹게 되고, 그때는 origin 말고는 "이건
+ * 사람이 한 게 아니다" 를 말할 방법이 없다. 그 자리를 검사로 미리 묶어 두었다.
  */
-const KEEL_SEED = Symbol('keel-seed');
+export const KEEL_SEED = Symbol('keel-seed');
 
 export interface KeelDocument {
   readonly doc: Y.Doc;
