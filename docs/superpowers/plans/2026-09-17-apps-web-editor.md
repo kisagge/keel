@@ -1031,11 +1031,21 @@ describe('지우기', () => {
     document.destroy();
   });
 
+  /**
+   * **중간 단언이 이 검사의 전부다.**
+   *
+   * `moveNode` 와 `removeNode` 는 각각 제 걸음이라(`beginStep`), `undo()` 한 번은
+   * `removeNode` 만 되돌린다. 그래서 "지운 뒤 자리가 없어졌다" 를 안 확인하면,
+   * `layout.delete` 를 빼 버려도 이 검사가 **공허하게 통과한다** — 자리가
+   * 되돌아온 게 아니라 애초에 건드려지지 않았을 뿐인데 같은 값이 나온다.
+   */
   it('되돌리면 텍스트와 자리가 함께 돌아온다', () => {
     const document = createKeelDocument(SOURCE);
     moveNode(document, 'api', { x: 100, y: 200 });
 
     removeNode(document, 'api');
+    expect(document.layout.get('api')).toBeUndefined();
+
     document.undoManager.undo();
 
     expect(document.source.toString()).toContain('service api');
@@ -1195,11 +1205,14 @@ export function moveNode(document: KeelDocument, id: string, at: Point): void {
 - [ ] **Step 4: 검사를 돌려 통과하는 것을 본다**
 
 Run: `cd apps/web && npx vitest run test/commands.test.ts`
-Expected: PASS (11 tests)
+Expected: PASS (12 tests)
 
 - [ ] **Step 5: 검사가 실제로 무는지 확인한다**
 
-1. `removeNode` 에서 `document.layout.delete(id)` 줄을 지운다 → 레이아웃 검사 둘이 져야 한다
+1. `removeNode` 에서 `document.layout.delete(id)` 줄을 지운다 → 레이아웃 검사 **둘 다** 져야 한다
+
+   둘 다 지는지 꼭 세어 본다. `되돌리면 텍스트와 자리가 함께 돌아온다` 는
+   중간 단언이 없으면 그 변형에서도 공허하게 통과한다 — 검사가 하나뿐인 셈이 된다.
 2. `editText` 의 `meaningful(...)` 을 걷어 내고 `plan(...)` 을 그대로 쓴다 → `바뀔 것이 없으면 트랜잭션을 안 연다` 가 져야 한다 (같은 이름으로 고치는 줄에서 진다)
 3. `beginStep` 호출 셋을 지운다 → `잇달아 한 명령 둘이 따로 되돌아간다` 가 져야 한다
 
