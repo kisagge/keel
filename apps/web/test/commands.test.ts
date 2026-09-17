@@ -108,11 +108,21 @@ describe('지우기', () => {
     document.destroy();
   });
 
+  /**
+   * **중간 단언이 이 검사의 전부다.**
+   *
+   * `moveNode` 와 `removeNode` 는 각각 제 걸음이라(`beginStep`), `undo()` 한 번은
+   * `removeNode` 만 되돌린다. 그래서 "지운 뒤 자리가 없어졌다" 를 안 확인하면,
+   * `layout.delete` 를 빼 버려도 이 검사가 **공허하게 통과한다** — 자리가
+   * 되돌아온 게 아니라 애초에 건드려지지 않았을 뿐인데 같은 값이 나온다.
+   */
   it('되돌리면 텍스트와 자리가 함께 돌아온다', () => {
     const document = createKeelDocument(SOURCE);
     moveNode(document, 'api', { x: 100, y: 200 });
 
     removeNode(document, 'api');
+    expect(document.layout.get('api')).toBeUndefined();
+
     document.undoManager.undo();
 
     expect(document.source.toString()).toContain('service api');
