@@ -1995,6 +1995,28 @@ describe('팬', () => {
     expect(third.intent.viewport.x).toBe(-45);
   });
 
+  /**
+   * **팬을 하다 손을 떼는 것은 흔한 조작인데 뜻이 없다.** 화면을 밀어 놓은
+   * 것으로 끝이고, 고르지도 문서를 고치지도 않는다. 여기서 엉뚱한 뜻이 새면
+   * 배경을 밀었을 뿐인데 선택이 풀리거나 무언가가 문서에 적힌다.
+   */
+  it('팬 하다 손을 떼면 아무 뜻도 안 남는다', () => {
+    const down = onPointerDown(IDLE, at(0, 0), undefined, DEFAULT_VIEWPORT);
+    const moved = onPointerMove(down, at(50, 30));
+    expect(moved.gesture.kind).toBe('panning');
+
+    const up = onPointerUp(moved.gesture, at(50, 30));
+    expect(up.gesture).toEqual(IDLE);
+    expect(up.intent).toEqual({ kind: 'none' });
+  });
+});
+
+describe('누르고 그냥 떼기', () => {
+  /**
+   * 이 검사는 `panning` 이 아니라 `pressed` 를 지난다 — 움직인 적이 없기
+   * 때문이다. "팬" 묶음에 두었더니 팬 쪽이 다 덮인 것처럼 보여, 정작 팬을
+   * 하다 떼는 경우가 빠진 것을 오래 못 봤다. 그래서 따로 묶는다.
+   */
   it('배경을 눌렀다 그냥 떼면 선택을 푼다', () => {
     const g = onPointerDown(IDLE, at(0, 0), undefined, DEFAULT_VIEWPORT);
     const up = onPointerUp(g, at(0, 0));
@@ -2187,7 +2209,9 @@ Expected: PASS (10 tests)
 
 1. 문턱 견주기를 `distance(...) < 0` 으로 바꿔 늘 끌기가 되게 한다 → `문턱을 안 넘고 떼면…` 이 져야 한다
 2. `dragMove` 에서 `grabOffset` 더하기를 빼고 `e.world` 를 그대로 쓴다 → `잡은 자리를 지킨다` 가 져야 한다
-3. `pan` 의 기준을 매번 갱신되는 값으로 바꾼다 → `팬은 여러 번 움직여도 누른 자리에서 잰다` 가 져야 한다
+3. `onPointerUp` 의 `panning` 갈래가 `NOTHING` 대신 `{ kind: 'select', hit: undefined }` 를 돌려주게 한다 → `팬 하다 손을 떼면 아무 뜻도 안 남는다` 가 져야 한다
+
+4. `pan` 의 기준을 매번 갱신되는 값으로 바꾼다 → `팬은 여러 번 움직여도 누른 자리에서 잰다` 가 져야 한다
 
    **두 자리를 따로 해 본다.** (a) `pressed → panning` 전환에서 `from: gesture.screen`
    을 `from: e.screen` 으로 바꾸기 (b) `panning` 갈래가 매 움직임마다 새 `from` 을
