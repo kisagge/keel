@@ -13,6 +13,7 @@ import { useKeelDocument } from '../hooks/use-keel-document.js';
 import { IDLE, onPointerDown, onPointerMove, onPointerUp } from '../interaction/gesture.js';
 import type { Gesture, Intent } from '../interaction/gesture.js';
 import { wheelToViewport } from '../interaction/wheel.js';
+import { TestHook } from './test-hook.js';
 
 /**
  * `handleIntent` 의 `void` 반환이 컴파일러의 소진성 검사를 묵살하지 않도록
@@ -223,6 +224,7 @@ export function CanvasPane({ document, selection, onSelect }: CanvasPaneProps) {
         onPointerCancel={onPointerUpHandler}
         style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
       />
+      <TestHook sceneAt={sceneAt} viewportRef={viewportRef} />
     </div>
   );
 }
