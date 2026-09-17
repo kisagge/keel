@@ -7,11 +7,20 @@ import { YSyncConfig } from 'y-codemirror.next';
 import { CanvasPane } from '../src/components/canvas-pane.js';
 import { DiagnosticsList } from '../src/components/diagnostics.js';
 import { EditorPane } from '../src/components/editor-pane.js';
+import { Inspector } from '../src/components/inspector.js';
+import type { InspectorTarget } from '../src/components/inspector.js';
 import { parseSource } from '../src/document/derive.js';
 import { createKeelDocument } from '../src/document/keel-document.js';
-import { useKeelDocument } from '../src/hooks/use-keel-document.js';
 import { SEED } from '../src/document/seed.js';
+import { useKeelDocument } from '../src/hooks/use-keel-document.js';
 
+/**
+ * 고른 것의 id.
+ *
+ * 노드·그룹 id 와 엣지 key 를 한 자루에 담아도 안전하다 — 파서가
+ * `duplicate-id` 를 잡아 노드와 그룹 id 가 안 겹치고, 엣지 key 에는 빈칸이
+ * 들어 있어(`"a b 0"`) id 와 절대 같아지지 않는다.
+ */
 function idOf(hit: Hit | undefined): string | undefined {
   if (hit === undefined) return undefined;
   if (hit.kind === 'node') return hit.node.id;
@@ -34,7 +43,7 @@ export default function EditorPage() {
    * 바뀌거나 플러그인이 붙기 전에 생긴 편집이 있으면 기댈 곳이 없어진다.
    * 생성자 매칭 자체는 `keel-document` 의 검사가 따로 묶고 있다.
    */
-  const document = useMemo(() => createKeelDocument(SEED, [YSyncConfig]), []);
+  const keelDocument = useMemo(() => createKeelDocument(SEED, [YSyncConfig]), []);
   /**
    * **문서를 정리하지 않는다.**
    *
@@ -53,7 +62,7 @@ export default function EditorPage() {
    * 문서를 효과 안에서 만들어 만듦과 지움을 짝지어야 한다.
    */
 
-  const source = useKeelDocument(document);
+  const source = useKeelDocument(keelDocument);
   const { document: parsed } = useMemo(() => parseSource(source), [source]);
 
   const viewRef = useRef<EditorView | null>(null);
@@ -64,11 +73,57 @@ export default function EditorPage() {
     view.focus();
   }, []);
 
-  const [selectedHit, setSelectedHit] = useState<Hit | undefined>(undefined);
-  const selection = useMemo(() => {
-    const id = idOf(selectedHit);
-    return new Set<string>(id === undefined ? [] : [id]);
-  }, [selectedHit]);
+  const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+  const onSelect = useCallback((hit: Hit | undefined) => setSelectedId(idOf(hit)), []);
+  const clearSelection = useCallback(() => setSelectedId(undefined), []);
+
+  const selection = useMemo(
+    () => new Set<string>(selectedId === undefined ? [] : [selectedId]),
+    [selectedId],
+  );
+
+  // 고른 것을 **매번 최신 문서에서 다시 찾는다.** 들고 있으면 곧 낡은 값이 된다
+  const target = useMemo((): InspectorTarget | undefined => {
+    if (selectedId === undefined) return undefined;
+
+    const node = parsed.nodes.find((n) => n.id === selectedId);
+    if (node !== undefined) {
+      return {
+        kind: 'node',
+        id: node.id,
+        nodeKind: node.kind,
+        rawLabel: node.label,
+        caption: undefined,
+        position: node.span.start,
+      };
+    }
+
+    const edge = parsed.edges.find((e) => e.key === selectedId);
+    if (edge !== undefined) {
+      return {
+        kind: 'edge',
+        id: edge.key,
+        nodeKind: undefined,
+        rawLabel: undefined,
+        caption: `${edge.from} → ${edge.to}`,
+        position: edge.span.start,
+      };
+    }
+
+    const group = parsed.groups.find((g) => g.id === selectedId);
+    if (group !== undefined) {
+      return {
+        kind: 'group',
+        id: group.id,
+        nodeKind: undefined,
+        rawLabel: undefined,
+        caption: `그룹 ${group.label ?? group.id}`,
+        position: group.headerSpan.start,
+      };
+    }
+
+    return undefined;
+  }, [parsed, selectedId]);
 
   return (
     <main style={{ height: '100%', display: 'grid', gridTemplateColumns: '40% 1fr' }}>
@@ -80,13 +135,21 @@ export default function EditorPage() {
           minHeight: 0,
         }}
       >
-        <EditorPane document={document} viewRef={viewRef} />
+        <EditorPane document={keelDocument} viewRef={viewRef} />
         <div style={{ borderTop: '1px solid var(--keel-border)', maxHeight: 160, minHeight: 0 }}>
           <DiagnosticsList diagnostics={parsed.diagnostics} onGoTo={goTo} />
         </div>
       </div>
 
-      <CanvasPane document={document} selection={selection} onSelect={setSelectedHit} />
+      <div style={{ position: 'relative', minWidth: 0 }}>
+        <CanvasPane document={keelDocument} selection={selection} onSelect={onSelect} />
+        <Inspector
+          target={target}
+          document={keelDocument}
+          onGoTo={goTo}
+          onCleared={clearSelection}
+        />
+      </div>
     </main>
   );
 }
