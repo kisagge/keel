@@ -61,3 +61,5 @@ export { groupPadding, stopgapPlacement } from './stopgap-layout.js';
 export type { StopgapResult } from './stopgap-layout.js';
 export { EMPTY_LAYOUT, EMPTY_SCENE, buildScene } from './scene.js';
 export type { Layout, LayoutReader, PlacedNode, Scene, SceneOptions } from './scene.js';
+export { groupFillAlpha, placeGroups } from './groups.js';
+export type { PlacedGroup } from './groups.js';
