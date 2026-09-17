@@ -37,3 +37,20 @@ export type {
 } from './theme.js';
 export { approximateMeasureText, fontString, memoizeMeasure, truncateToWidth } from './measure.js';
 export type { MeasureText, TextStyle } from './measure.js';
+export {
+  DEFAULT_VIEWPORT,
+  ZOOM_LIMITS,
+  applyMatrix,
+  canvasPixelSize,
+  clampDevicePixelRatio,
+  clampZoom,
+  fitToContent,
+  panBy,
+  screenToWorld,
+  setZoomAt,
+  viewportMatrix,
+  visibleWorldRect,
+  worldToScreen,
+  zoomAt,
+} from './viewport.js';
+export type { FitOptions, Matrix, Viewport, ZoomLimits } from './viewport.js';
