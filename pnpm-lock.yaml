@@ -81,6 +81,9 @@ importers:
 
   e2e:
     devDependencies:
+      '@keel/config':
+        specifier: workspace:*
+        version: link:../packages/config
       '@playwright/test':
         specifier: 1.63.0
         version: 1.63.0
