@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-base-to-string */
 import { parse, planRemoveNode, planSetNodeKind, planSetNodeLabel } from '@keel/dsl';
 import type { NodeKind, ParsedDocument, TextEdit } from '@keel/dsl';
 import type { Point } from '@keel/renderer';

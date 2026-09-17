@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-base-to-string */
 import { describe, expect, it } from 'vitest';
 import { moveNode, removeNode, renameNode, setNodeKind } from '../src/document/commands.js';
 import { createKeelDocument } from '../src/document/keel-document.js';

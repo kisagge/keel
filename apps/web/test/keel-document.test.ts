@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-base-to-string */
 import { describe, expect, it } from 'vitest';
 import { KEEL_LOCAL, KEEL_SEED, createKeelDocument } from '../src/document/keel-document.js';
 

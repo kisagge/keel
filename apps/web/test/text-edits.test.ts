@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-base-to-string */
 import { parse, planSetNodeLabel } from '@keel/dsl';
 import type { TextEdit } from '@keel/dsl';
 import { describe, expect, it } from 'vitest';
