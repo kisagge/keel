@@ -2563,9 +2563,21 @@ export function useCanvas(options: UseCanvasOptions): UseCanvas {
     return () => observer.disconnect();
   }, [resize]);
 
+  /**
+   * 취소한 뒤 **반드시 `null` 로 되돌린다.**
+   *
+   * 안 되돌리면 `frame.current` 가 이미 취소된 id 를 계속 들고 있고,
+   * `invalidate()` 의 문지기가 그것을 "이미 예약됨" 으로 읽어 다시 그리기를
+   * 영원히 막는다. React 의 Strict Mode 는 개발 중에 마운트→정리→재마운트를
+   * 한 번 흉내 내므로, **첫 그리기 뒤 캔버스가 그대로 얼어붙는다.**
+   * 띄워 보기 전에는 안 보이는 부류다 — 타입도 린트도 검사도 다 통과한다.
+   */
   useEffect(
     () => () => {
-      if (frame.current !== null) window.cancelAnimationFrame(frame.current);
+      if (frame.current !== null) {
+        window.cancelAnimationFrame(frame.current);
+        frame.current = null;
+      }
     },
     [],
   );
@@ -2772,8 +2784,14 @@ Expected: 전부 통과
 - [ ] **Step 6: 눈으로 확인한다**
 
 Run: `pnpm --filter @keel/web dev` 를 띄우고 `http://localhost:3000` 을 연다
+
+**`build` 가 아니라 `dev` 로 봐야 한다.** React 의 Strict Mode 는 개발 중에만
+마운트→정리→재마운트를 흉내 내는데, 정리에서 남긴 찌꺼기로 화면이 얼어붙는
+부류의 버그는 그때만 드러난다. 타입·린트·검사·빌드를 전부 통과하고도 화면이
+안 움직일 수 있다.
+
 Expected:
-- 씨앗 문서의 노드 여덟 개와 `결제` 그룹 테두리가 보인다
+- 씨앗 문서의 노드 일곱 개와 `결제` 그룹 테두리가 보인다
 - 종류마다 생김새가 다르다 (`external toss` 는 점선, `db orders` 는 원통)
 - 휠로 화면이 밀리고 `Ctrl`+휠(또는 트랙패드 핀치)로 커서 자리를 붙든 채 확대된다
 - 창 크기를 바꿔도 흐려지지 않는다
