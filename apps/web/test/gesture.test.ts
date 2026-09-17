@@ -129,6 +129,28 @@ describe('팬', () => {
     expect(third.intent.viewport.x).toBe(-45);
   });
 
+  /**
+   * **팬을 하다 손을 떼는 것은 흔한 조작인데 뜻이 없다.** 화면을 밀어 놓은
+   * 것으로 끝이고, 고르지도 문서를 고치지도 않는다. 여기서 엉뚱한 뜻이 새면
+   * 배경을 밀었을 뿐인데 선택이 풀리거나 무언가가 문서에 적힌다.
+   */
+  it('팬 하다 손을 떼면 아무 뜻도 안 남는다', () => {
+    const down = onPointerDown(IDLE, at(0, 0), undefined, DEFAULT_VIEWPORT);
+    const moved = onPointerMove(down, at(50, 30));
+    expect(moved.gesture.kind).toBe('panning');
+
+    const up = onPointerUp(moved.gesture, at(50, 30));
+    expect(up.gesture).toEqual(IDLE);
+    expect(up.intent).toEqual({ kind: 'none' });
+  });
+});
+
+describe('누르고 그냥 떼기', () => {
+  /**
+   * 이 검사는 `panning` 이 아니라 `pressed` 를 지난다 — 움직인 적이 없기
+   * 때문이다. "팬" 묶음에 두었더니 팬 쪽이 다 덮인 것처럼 보여, 정작 팬을
+   * 하다 떼는 경우가 빠진 것을 오래 못 봤다. 그래서 따로 묶는다.
+   */
   it('배경을 눌렀다 그냥 떼면 선택을 푼다', () => {
     const g = onPointerDown(IDLE, at(0, 0), undefined, DEFAULT_VIEWPORT);
     const up = onPointerUp(g, at(0, 0));
