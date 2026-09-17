@@ -1,6 +1,8 @@
 import type { Graph, GraphNode } from '@keel/graph';
 import { EMPTY_RECT, rectOf, unionAll } from './geometry.js';
 import type { Point, Rect, Size } from './geometry.js';
+import { placeEdges } from './edges.js';
+import type { PlacedEdge } from './edges.js';
 import { placeGroups } from './groups.js';
 import type { PlacedGroup } from './groups.js';
 import { approximateMeasureText } from './measure.js';
@@ -76,9 +78,11 @@ export interface SceneOptions {
 
 export interface Scene {
   readonly nodes: readonly PlacedNode[];
+  readonly edges: readonly PlacedEdge[];
   /** **얕은 것부터.** 그대로 그리면 부모 위에 자식이 얹힌다 */
   readonly groups: readonly PlacedGroup[];
   readonly nodeById: ReadonlyMap<string, PlacedNode>;
+  readonly edgeByKey: ReadonlyMap<string, PlacedEdge>;
   readonly groupById: ReadonlyMap<string, PlacedGroup>;
   /** 노드·그룹·엣지를 전부 담는 상자. `fitToContent` 에 그대로 넣는다 */
   readonly contentBounds: Rect;
@@ -87,8 +91,10 @@ export interface Scene {
 
 export const EMPTY_SCENE: Scene = {
   nodes: [],
+  edges: [],
   groups: [],
   nodeById: new Map(),
+  edgeByKey: new Map(),
   groupById: new Map(),
   contentBounds: EMPTY_RECT,
   theme: DEFAULT_THEME,
@@ -129,20 +135,23 @@ export function buildScene(graph: Graph, layout: LayoutReader, options: SceneOpt
     });
   }
 
-  const groups = placeGroups(
-    tree,
-    new Map(nodes.map((n) => [n.id, n.rect])),
-    stopgap.emptyGroupSeeds,
-    theme,
-  );
+  const nodeRectById = new Map(nodes.map((n) => [n.id, n.rect]));
+  const groups = placeGroups(tree, nodeRectById, stopgap.emptyGroupSeeds, theme);
+  const edges = placeEdges(graph.edges, nodeRectById, theme, measure);
 
   return {
     nodes,
+    edges,
     groups,
     nodeById: new Map(nodes.map((n) => [n.id, n])),
+    edgeByKey: new Map(edges.map((e) => [e.key, e])),
     groupById: new Map(groups.map((g) => [g.id, g])),
     contentBounds:
-      unionAll([...nodes.map((n) => n.rect), ...groups.map((g) => g.rect)]) ?? EMPTY_RECT,
+      unionAll([
+        ...nodes.map((n) => n.rect),
+        ...groups.map((g) => g.rect),
+        ...edges.map((e) => e.bounds),
+      ]) ?? EMPTY_RECT,
     theme,
   };
 }
