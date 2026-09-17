@@ -1423,19 +1423,33 @@ EOF
 
 **Files:**
 - Create: `apps/web/test/concurrent.test.ts`
+- Modify: `apps/web/src/document/text-edits.ts` (머리 주석의 틀린 이유만)
+- Modify: `packages/dsl/src/edits.ts` (머리 주석의 틀린 이유만)
 
 **Interfaces:**
 - Consumes: Task 3 의 `createKeelDocument`, Task 4 의 `renameNode`·`moveNode`·`removeNode`
 
-이 태스크는 **검사만** 더한다. 새 코드는 없다. README 가 "통째로 다시 쓰면 CRDT
-에서 같은 순간 남이 친 글자가 병합이 아니라 소멸이 된다" 고 주장하는데, 서버가
-없는 지금도 `Y.Doc` 둘을 손으로 붙이면 그 주장을 검사할 수 있다.
+이 태스크는 **검사만** 더한다. 새 코드는 없다. 서버가 없어도 `Y.Doc` 둘을 손으로
+붙이면 서버가 하는 일이 그대로 재현되므로, 이 저장소가 구간 수정을 고집하는
+이유를 지금 증명할 수 있다.
+
+**다만 그 이유는 처음에 적어 둔 것과 다르다.** 재 보니 Yjs 에서 통째로 다시 써도
+상대의 삽입이 *소멸하지는* 않는다 — Yjs 는 자리가 아니라 항목 단위로 지우므로,
+내가 못 본 상대의 삽입은 내 지우기에 안 걸린다. 실제로 일어나는 일은 더 나쁘다:
+**양쪽이 각자 쓴 전문이 나란히 살아남아 문서가 둘로 불어난다.** 이음매에서 줄이
+뭉개지고(`web -> apiservice web "스토어프론트"`), 같은 이름의 노드가 두 벌씩
+생기고, 파서가 진단을 쏟는다.
+
+그래서 검사도 "글자가 남아 있나" 가 아니라 **"문서가 여전히 문서인가"** 를 본다 —
+합쳐진 결과를 다시 파싱해 진단이 0 이고 노드 이름이 안 겹치는지 확인한다.
+글자만 세면 통째로 쓰기에서도 통과해 버려서 아무것도 못 묶는다.
 
 - [ ] **Step 1: 검사를 쓴다**
 
 `apps/web/test/concurrent.test.ts`:
 
 ```ts
+import { parse } from '@keel/dsl';
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { moveNode, removeNode, renameNode } from '../src/document/commands.js';
@@ -1460,11 +1474,14 @@ function pair(source: string): [KeelDocument, KeelDocument] {
 
 describe('같은 문서를 둘이 고친다', () => {
   /**
-   * 이 저장소의 핵심 주장이다. 캔버스가 문서를 통째로 다시 썼다면 — "전부
-   * 지우고 전부 넣기" — 상대의 삽입이 지우기 구간 안에 있어 병합이 아니라
-   * 소멸이 됐을 것이다. 구간 수정이라서 둘 다 산다.
+   * 이 저장소의 핵심 주장이다.
+   *
+   * **글자가 남아 있는지만 보면 안 된다.** 통째로 다시 써도 양쪽 글자는 남는다 —
+   * 양쪽 전문이 나란히 살아남기 때문이다. 그래서 합쳐진 결과를 **다시 파싱해**
+   * 문서가 여전히 문서인지 본다. 통째로 쓰면 이음매에서 줄이 뭉개지고 노드가
+   * 두 벌씩 생겨 여기서 진단이 쏟아진다.
    */
-  it('서로 다른 노드의 이름을 동시에 고치면 둘 다 산다', () => {
+  it('서로 다른 노드의 이름을 동시에 고치면 문서가 온전하다', () => {
     const [a, b] = pair(SOURCE);
 
     renameNode(a, 'api', '주문 API');
@@ -1472,8 +1489,17 @@ describe('같은 문서를 둘이 고친다', () => {
     sync(a, b);
 
     for (const document of [a, b]) {
-      expect(document.source.toString()).toContain('service api "주문 API"');
-      expect(document.source.toString()).toContain('db orders "주문 DB"');
+      const merged = document.source.toString();
+      expect(merged).toContain('service api "주문 API"');
+      expect(merged).toContain('db orders "주문 DB"');
+
+      // 문서가 불어나지도, 뭉개지지도 않았다
+      const parsed = parse(merged);
+      expect(parsed.diagnostics).toHaveLength(0);
+      expect(merged.split('\n')).toHaveLength(SOURCE.split('\n').length);
+
+      const ids = parsed.nodes.map((n) => n.id);
+      expect(new Set(ids).size).toBe(ids.length);
     }
 
     a.destroy();
@@ -1489,8 +1515,10 @@ describe('같은 문서를 둘이 고친다', () => {
     sync(a, b);
 
     for (const document of [a, b]) {
-      expect(document.source.toString()).toContain('service api "주문 API"');
-      expect(document.source.toString()).toContain('queue events');
+      const merged = document.source.toString();
+      expect(merged).toContain('service api "주문 API"');
+      expect(merged).toContain('queue events');
+      expect(parse(merged).diagnostics).toHaveLength(0);
     }
 
     a.destroy();
@@ -1568,25 +1596,65 @@ function editText(document: KeelDocument, plan: (doc: ParsedDocument) => TextEdi
 ```
 
 Run: `cd apps/web && npx vitest run test/concurrent.test.ts`
-Expected: FAIL — `서로 다른 노드의 이름을 동시에 고치면 둘 다 산다` 가 진다. 한쪽의
-고침이 상대의 지우기 구간에 먹혀 사라진다. **확인 후 되돌린다.**
+Expected: FAIL — `서로 다른 노드의 이름을 동시에 고치면 문서가 온전하다` 가 진다.
+합쳐진 문서가 **둘로 불어나** 진단이 쏟아지고, 줄 수가 늘고, 같은 이름의 노드가
+두 벌 생긴다. 실제로 이런 모양이 된다:
 
-이것이 `edits.ts` 가 있는 이유를 눈으로 보는 자리다.
+```
+service web "스토어프론트"
+service api
+db orders "주문 DB"
+web -> apiservice web "스토어프론트"      <- 이음매에서 줄이 뭉개졌다
+service api "주문 API"
+db orders
+web -> api
+```
+
+**확인 후 되돌린다.** `commands.ts` 가 손대기 전과 한 글자도 다르지 않은지
+확인한다.
+
+이것이 `edits.ts` 가 있는 이유를 눈으로 보는 자리다. 그리고 **글자만 세는 검사로는
+이것을 못 잡는다** — 양쪽 글자가 다 남아 있기 때문이다. 다시 파싱해 보는 단언이
+있어야 문서가 망가진 것이 드러난다.
+
+- [ ] **Step 3.5: 같은 거짓 이유가 적힌 주석 둘을 고친다**
+
+방금 잰 것이 두 파일의 머리 주석을 거짓으로 만든다. 이 저장소의 주석은 진짜
+이유를 적으므로 함께 고친다. **글자만 고친다 - 코드는 건드리지 않는다.**
+
+고칠 곳은 `apps/web/src/document/text-edits.ts` 와 `packages/dsl/src/edits.ts` 의
+머리 주석에서 "같은 순간 다른 사람이 친 글자가 지워진다 / 병합이 아니라 소멸이
+된다" 고 말하는 대목이다.
+
+실제로 일어나는 일로 바꾼다 - 소멸이 아니라 **문서가 둘로 불어난다.** Yjs 는
+자리가 아니라 항목 단위로 지우므로 내가 못 본 상대의 삽입은 내 지우기에 안
+걸린다. 그래서 양쪽 전문이 나란히 남아 이음매에서 줄이 뭉개지고 같은 이름의
+노드가 두 벌 생긴다. 잰 숫자(구간 수정 4줄·진단 0 / 통째로 쓰기 7줄·진단 4)를
+근거로 적어 둔다.
+
+`packages/dsl` 은 이 앱 밖이지만 주석 한 대목이라 같이 고치는 것이 맞다 -
+틀린 설명을 남겨 두면 다음 사람이 그것을 믿는다.
 
 - [ ] **Step 4: 커밋**
 
 ```bash
-git add apps/web/test/concurrent.test.ts
+git add apps/web/test/concurrent.test.ts apps/web/src/document/text-edits.ts packages/dsl/src/edits.ts
 git commit -F - <<'EOF'
-web: 같은 문서를 둘이 고쳐도 둘 다 사는 것을 검사한다
+web: 같은 문서를 둘이 고쳐도 문서가 온전한 것을 검사한다
 
-README 의 핵심 주장 — 통째로 다시 쓰면 CRDT 에서 같은 순간 남이 친 글자가
-병합이 아니라 소멸이 된다 — 을 서버 없이 검사한다. Y.Doc 둘을 손으로 붙이면
-서버가 하는 일이 그대로 재현된다.
+서버가 없어도 Y.Doc 둘을 손으로 붙이면 서버가 하는 일이 그대로 재현된다.
+이 저장소가 구간 수정을 고집하는 이유를 지금 증명한다.
 
-commands 의 editText 를 통째로 다시 쓰기로 바꿔 검사가 지는 것을 확인했다.
-한쪽의 고침이 상대의 지우기 구간에 먹혀 사라진다. packages/dsl 의 구간 수정
-설계가 왜 있는지를 눈으로 보는 자리다.
+다만 그 이유는 지금까지 적어 둔 것과 다르다. 재 보니 Yjs 에서는 통째로 다시
+써도 상대의 삽입이 소멸하지 않는다 - Yjs 는 자리가 아니라 항목 단위로 지우므로
+내가 못 본 상대의 삽입은 내 지우기에 안 걸린다.
+
+실제로 일어나는 일은 더 나쁘다. 양쪽이 각자 쓴 전문이 나란히 살아남아 문서가
+둘로 불어난다. 이음매에서 줄이 뭉개지고, 같은 이름의 노드가 두 벌씩 생기고,
+파서가 진단을 쏟는다. 구간 수정일 때는 4줄 진단 0, 통째로 쓰기는 7줄 진단 4 였다.
+
+그래서 검사가 글자를 세지 않고 합쳐진 문서를 다시 파싱한다. 글자만 세면 통째로
+쓰기에서도 통과해 아무것도 못 묶는다 - 양쪽 글자가 다 남아 있기 때문이다.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
