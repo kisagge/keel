@@ -1,0 +1,27 @@
+{
+  "extends": "@keel/config/tsconfig/next.json",
+  "compilerOptions": {
+    "types": ["node"],
+
+    /**
+     * 공유 프리셋은 `bundler` 인데 여기서만 `nodenext` 로 덮어쓴다.
+     *
+     * 이 저장소의 패키지들은 상대 경로를 `./cull.js` 처럼 적는다(ESM 관례).
+     * Turbopack 이 그것을 `cull.ts` 로 바꿔 찾아 주려면 `nodenext` 여야 한다 —
+     * `bundler` 로 두면 `@keel/renderer` 의 재수출 전부가 "모듈을 못 찾는다" 로
+     * 빌드를 깬다. `transpilePackages` 로는 안 고쳐진다(그쪽은 필요도 없다).
+     */
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+
+    "paths": { "@/*": ["./src/*"] }
+  },
+
+  /**
+   * `*.ts` 를 넣지 않는다. 넣으면 `next.config.ts` 와 `vitest.config.ts` 가
+   * 이 프로젝트에도 들고 공유 eslint 프리셋의 `allowDefaultProject` 에도 들어,
+   * typescript-eslint 가 파싱을 거부한다. 다른 패키지들도 `src`·`test` 만 넣는다.
+   */
+  "include": ["next-env.d.ts", "app/**/*", "src/**/*", "test/**/*"],
+  "exclude": ["node_modules", ".next"]
+}

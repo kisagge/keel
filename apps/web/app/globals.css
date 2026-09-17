@@ -1,0 +1,19 @@
+:root {
+  --keel-bg: #fbfbfa;
+  --keel-surface: #ffffff;
+  --keel-border: #d6d3d1;
+  --keel-text: #1c1917;
+  --keel-muted: #78716c;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--keel-bg);
+  color: var(--keel-text);
+  font-family: Inter, Pretendard, system-ui, sans-serif;
+}
+
+#__next, body > div { height: 100%; }

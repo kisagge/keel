@@ -1,0 +1,38 @@
+{
+  "name": "@keel/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@keel/dsl": "workspace:*",
+    "@keel/graph": "workspace:*",
+    "@keel/renderer": "workspace:*",
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/lint": "6.9.7",
+    "@codemirror/state": "6.7.5",
+    "@codemirror/view": "6.43.12",
+    "next": "16.3.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "y-codemirror.next": "0.3.6",
+    "yjs": "13.6.32"
+  },
+  "devDependencies": {
+    "@keel/config": "workspace:*",
+    "@types/node": "24.9.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "eslint": "10.9.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
+  }
+}
