@@ -1,17 +1,27 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Hit } from '@keel/renderer';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
+import { moveNode } from '../document/commands.js';
 import { createMeasure, parseSource, sceneOf } from '../document/derive.js';
 import type { KeelDocument } from '../document/keel-document.js';
 import { withDrag, yMapReader } from '../document/layout-reader.js';
 import type { Drag } from '../document/layout-reader.js';
 import { useCanvas } from '../hooks/use-canvas.js';
 import { useKeelDocument } from '../hooks/use-keel-document.js';
+import { IDLE, onPointerDown, onPointerMove, onPointerUp } from '../interaction/gesture.js';
+import type { Gesture, Intent } from '../interaction/gesture.js';
 import { wheelToViewport } from '../interaction/wheel.js';
 
-export function CanvasPane({ document }: { document: KeelDocument }) {
+export interface CanvasPaneProps {
+  readonly document: KeelDocument;
+  readonly selection: ReadonlySet<string>;
+  readonly onSelect: (hit: Hit | undefined) => void;
+}
+
+export function CanvasPane({ document, selection, onSelect }: CanvasPaneProps) {
   const source = useKeelDocument(document);
-  const [selection] = useState<ReadonlySet<string>>(() => new Set());
 
   const dragRef = useRef<Drag | undefined>(undefined);
 
@@ -54,6 +64,18 @@ export function CanvasPane({ document }: { document: KeelDocument }) {
     invalidate();
   }, [source, invalidate]);
 
+  /**
+   * 고른 것이 바뀌어도 다시 그린다.
+   *
+   * `selection` 은 부모가 쥔 React state 라서 `onSelect` 를 부르는 것만으로는
+   * 캔버스가 다시 그려지지 않는다 — `useCanvas` 안의 `optionsRef` 갱신은 커밋
+   * 뒤 effect 인데, 그 전에 실행되는 무언가가 없으면 아무도 `invalidate()` 를
+   * 안 부른다. 다음 팬·줌이나 끌기가 있을 때까지 파란 테두리가 안 보인다.
+   */
+  useEffect(() => {
+    invalidate();
+  }, [selection, invalidate]);
+
   // 레이아웃이 바뀌어도 다시 그린다 (남이 옮겼거나 되돌렸을 때)
   useEffect(() => {
     const onChange = () => invalidate();
@@ -80,6 +102,94 @@ export function CanvasPane({ document }: { document: KeelDocument }) {
     [invalidate, toScreen, viewportRef],
   );
 
+  const gestureRef = useRef<Gesture>(IDLE);
+
+  const pointerAt = useCallback(
+    (e: ReactPointerEvent<HTMLCanvasElement>) => {
+      const screen = toScreen(e.clientX, e.clientY);
+      return { screen, world: canvas.toWorld(screen) };
+    },
+    [canvas, toScreen],
+  );
+
+  const handleIntent = useCallback(
+    (intent: Intent) => {
+      switch (intent.kind) {
+        case 'none':
+          return;
+
+        case 'select':
+          onSelect(intent.hit);
+          return;
+
+        case 'pan':
+          viewportRef.current = intent.viewport;
+          invalidate();
+          return;
+
+        // 끌고 있는 자리는 **아직 문서가 아니다.** ref 에만 두고 그리기만 한다
+        case 'drag-move':
+          dragRef.current = { id: intent.nodeId, at: intent.at };
+          invalidate();
+          return;
+
+        /**
+         * 놓는 순간 문서가 된다. 중간 좌표까지 CRDT 에 넣으면 실시간 판에서
+         * 업데이트 로그가 포인터무브 수만큼 불어난다.
+         */
+        case 'commit-drag':
+          dragRef.current = undefined;
+          moveNode(document, intent.nodeId, intent.at);
+          invalidate();
+          return;
+      }
+    },
+    [document, invalidate, onSelect, viewportRef],
+  );
+
+  const onPointerDownHandler = useCallback(
+    (e: ReactPointerEvent<HTMLCanvasElement>) => {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const at = pointerAt(e);
+      gestureRef.current = onPointerDown(
+        gestureRef.current,
+        at,
+        canvas.hitAt(at.world),
+        viewportRef.current,
+      );
+    },
+    [canvas, pointerAt, viewportRef],
+  );
+
+  const onPointerMoveHandler = useCallback(
+    (e: ReactPointerEvent<HTMLCanvasElement>) => {
+      const at = pointerAt(e);
+
+      // 가리킨 것은 ref 도 state 도 아니고 커서 모양으로만 나타난다
+      if (gestureRef.current.kind === 'idle') {
+        canvas.setCursor(canvas.hitAt(at.world)?.kind === 'node' ? 'grab' : 'default');
+        return;
+      }
+
+      const { gesture, intent } = onPointerMove(gestureRef.current, at);
+      gestureRef.current = gesture;
+      if (gesture.kind === 'dragging') canvas.setCursor('grabbing');
+      handleIntent(intent);
+    },
+    [canvas, handleIntent, pointerAt],
+  );
+
+  const onPointerUpHandler = useCallback(
+    (e: ReactPointerEvent<HTMLCanvasElement>) => {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      const { gesture, intent } = onPointerUp(gestureRef.current, pointerAt(e));
+      gestureRef.current = gesture;
+      canvas.setCursor('default');
+      handleIntent(intent);
+    },
+    [canvas, handleIntent, pointerAt],
+  );
+
   /**
    * React 의 `onWheel` 은 수동 리스너라 `preventDefault` 가 안 먹는다.
    * 브라우저가 페이지를 확대해 버리므로 직접 붙인다.
@@ -94,7 +204,14 @@ export function CanvasPane({ document }: { document: KeelDocument }) {
 
   return (
     <div ref={wheelTarget} style={{ position: 'relative', height: '100%', overflow: 'hidden' }}>
-      <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+      <canvas
+        ref={canvasRef}
+        onPointerDown={onPointerDownHandler}
+        onPointerMove={onPointerMoveHandler}
+        onPointerUp={onPointerUpHandler}
+        onPointerCancel={onPointerUpHandler}
+        style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
+      />
     </div>
   );
 }

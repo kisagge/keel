@@ -1,9 +1,19 @@
 'use client';
 
-import { useMemo } from 'react';
+import type { Hit } from '@keel/renderer';
+import { useCallback, useMemo, useState } from 'react';
 import { CanvasPane } from '../src/components/canvas-pane.js';
 import { createKeelDocument } from '../src/document/keel-document.js';
 import { SEED } from '../src/document/seed.js';
+
+/** 고른 것의 id. 노드·그룹 id 와 엣지 key 를 한 자루에 담아도 안전하다 —
+ *  파서가 duplicate-id 를 잡아 둘이 안 겹치고, 엣지 key 에는 빈칸이 들어 있다 */
+function idOf(hit: Hit | undefined): string | undefined {
+  if (hit === undefined) return undefined;
+  if (hit.kind === 'node') return hit.node.id;
+  if (hit.kind === 'edge') return hit.edge.key;
+  return hit.group.id;
+}
 
 export default function EditorPage() {
   const document = useMemo(() => createKeelDocument(SEED), []);
@@ -25,9 +35,17 @@ export default function EditorPage() {
    * 문서를 효과 안에서 만들어 만듦과 지움을 짝지어야 한다.
    */
 
+  const [selectedHit, setSelectedHit] = useState<Hit | undefined>(undefined);
+  const selection = useMemo(() => {
+    const id = idOf(selectedHit);
+    return new Set<string>(id === undefined ? [] : [id]);
+  }, [selectedHit]);
+
+  const onSelect = useCallback((hit: Hit | undefined) => setSelectedHit(hit), []);
+
   return (
     <main style={{ height: '100%' }}>
-      <CanvasPane document={document} />
+      <CanvasPane document={document} selection={selection} onSelect={onSelect} />
     </main>
   );
 }
