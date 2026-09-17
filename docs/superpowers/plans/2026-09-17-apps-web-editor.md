@@ -426,6 +426,50 @@ describe('구간 수정 얹기', () => {
   });
 
   /**
+   * `delete`·`insert` 는 하나하나가 제 트랜잭션을 연다. 안 묶으면 수정 둘이
+   * 갱신 **넷**으로 날아가고, 실시간 판에서 남의 화면이 반쯤 고쳐진 문서를
+   * 실제로 본다.
+   */
+  it('수정이 여럿이어도 갱신은 한 번이다', () => {
+    const doc = new Y.Doc();
+    const ytext = doc.getText('source');
+    ytext.insert(0, 'aaa bbb ccc');
+
+    let updates = 0;
+    doc.on('update', () => {
+      updates += 1;
+    });
+
+    applyTextEdits(ytext, [
+      { from: 0, to: 3, insert: 'XXXXX' },
+      { from: 8, to: 11, insert: 'Z' },
+    ]);
+
+    expect(updates).toBe(1);
+    expect(ytext.toString()).toBe('XXXXX bbb Z');
+  });
+
+  /** 부르는 쪽이 이미 트랜잭션 안이면 바깥 것에 합쳐지고 origin 도 지켜진다 */
+  it('바깥 트랜잭션 안에서 불러도 그 origin 을 지킨다', () => {
+    const doc = new Y.Doc();
+    const ytext = doc.getText('source');
+    ytext.insert(0, 'service a');
+
+    const OUTER = Symbol('바깥');
+    const origins: unknown[] = [];
+    doc.on('afterTransaction', (transaction: Y.Transaction) => {
+      origins.push(transaction.origin);
+    });
+
+    doc.transact(() => {
+      applyTextEdits(ytext, [{ from: 8, to: 9, insert: 'b' }]);
+    }, OUTER);
+
+    expect(origins).toEqual([OUTER]);
+    expect(ytext.toString()).toBe('service b');
+  });
+
+  /**
    * `dsl` 의 `applyEdits` 는 문자열 사본에 얹으므로 중간에 던져도 남는 것이 없다.
    * 여기는 **여럿이 함께 보는 문서**를 직접 고치므로, 반쯤 고치다 던지면 남의
    * 화면에 깨진 문서가 남는다. 그래서 먼저 전부 검사하고 그다음에 얹는다.
@@ -473,12 +517,23 @@ import type * as Y from 'yjs';
  *
  * 내림차순으로 가면 앞쪽 오프셋이 그대로 맞는다. 앞에서부터 가면 수정 하나마다
  * 뒤쪽 자리를 전부 다시 세어야 한다.
- */
+ *
+ * ## 한 트랜잭션으로 묶는다
+ *
+ * `Y.Text` 의 `delete`·`insert` 는 하나하나가 제 트랜잭션을 연다. 안 묶으면
+ * 수정 두 개가 갱신 **네 번**으로 날아가고(직접 재 봤다), 실시간 판에서 남의
+ * 화면은 반쯤 고쳐진 문서를 실제로 본다 — 이 함수가 막겠다고 적어 둔 바로
+ * 그것이 예외가 날 때만이 아니라 평소에도 새는 셈이다.
+ *
+ * 부르는 쪽이 이미 트랜잭션 안이면(`commands.ts` 가 그렇다) 중첩이 되는데,
+ * Yjs 는 그것을 바깥 것에 합치고 **바깥 origin 을 지킨다.** 확인했다 —
+ * 그래서 되돌리기가 보는 origin 이 안 바뀐다.
 export function applyTextEdits(ytext: Y.Text, edits: readonly TextEdit[]): void {
   if (edits.length === 0) return;
 
   const sorted = [...edits].sort((a, b) => b.from - a.from || b.to - a.to);
 
+  // 검사는 트랜잭션 **밖**에서 한다 — 던지면 트랜잭션을 아예 열지 않는다
   let previousFrom = Number.POSITIVE_INFINITY;
   for (const edit of sorted) {
     if (edit.to > previousFrom) {
@@ -487,10 +542,20 @@ export function applyTextEdits(ytext: Y.Text, edits: readonly TextEdit[]): void 
     previousFrom = edit.from;
   }
 
-  for (const edit of sorted) {
-    if (edit.to > edit.from) ytext.delete(edit.from, edit.to - edit.from);
-    if (edit.insert.length > 0) ytext.insert(edit.from, edit.insert);
+  const apply = (): void => {
+    for (const edit of sorted) {
+      if (edit.to > edit.from) ytext.delete(edit.from, edit.to - edit.from);
+      if (edit.insert.length > 0) ytext.insert(edit.from, edit.insert);
+    }
+  };
+
+  const doc = ytext.doc;
+  if (doc === null) {
+    // 문서에 안 붙은 Y.Text. 묶을 트랜잭션이 없으니 그냥 얹는다
+    apply();
+    return;
   }
+  doc.transact(apply);
 }
 ```
 
@@ -505,6 +570,7 @@ Expected: PASS (5 tests)
 
 1. 정렬을 오름차순(`a.from - b.from`)으로 바꾼다 → `여러 군데를 한 번에 고쳐도…` 가 져야 한다
 2. 검사 고리를 지우고 얹기 고리 안에서 던지게 한다 → `겹치는 수정은 던지고, 문서는 손도 안 댄 채로…` 가 져야 한다
+3. `doc.transact(apply)` 를 `apply()` 로 바꾼다 → `수정이 여럿이어도 갱신은 한 번이다` 가 져야 한다 (갱신이 4번 난다)
 
 Expected: 둘 다 FAIL. 확인 후 되돌린다.
 
@@ -523,8 +589,13 @@ packages/dsl 의 설계 전부가 이 함수 하나를 위해 있었다. 통째�
 중간에 던져도 남는 것이 없지만, 여기는 여럿이 함께 보는 문서를 직접 고친다 —
 반쯤 고치다 던지면 남의 화면에 깨진 문서가 남고 그대로 퍼진다.
 
-정렬을 오름차순으로 바꾸고, 검사 고리를 얹기 고리 안으로 옮겨 각각 검사가
-지는 것을 확인했다.
+수정 여럿을 한 트랜잭션으로 묶는다. Y.Text 의 delete·insert 는 하나하나가 제
+트랜잭션을 열어서, 안 묶으면 수정 두 개가 갱신 네 번으로 날아간다 — 실시간
+판에서 남의 화면이 반쯤 고쳐진 문서를 실제로 본다. 부르는 쪽이 이미 트랜잭션
+안이면 중첩이 바깥 것에 합쳐지고 바깥 origin 도 지켜지는 것을 검사로 묶었다.
+
+정렬을 오름차순으로, 검사 고리를 얹기 고리 안으로, 트랜잭션 묶기를 빼는 것
+셋으로 각각 검사가 지는 것을 확인했다.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
