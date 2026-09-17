@@ -2,13 +2,15 @@
 
 import type { EditorView } from '@codemirror/view';
 import type { Hit } from '@keel/renderer';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { YSyncConfig } from 'y-codemirror.next';
 import { CanvasPane } from '../src/components/canvas-pane.js';
 import { DiagnosticsList } from '../src/components/diagnostics.js';
 import { EditorPane } from '../src/components/editor-pane.js';
 import { Inspector } from '../src/components/inspector.js';
 import type { InspectorTarget } from '../src/components/inspector.js';
+import { Split } from '../src/components/split.js';
+import { removeNode } from '../src/document/commands.js';
 import { parseSource } from '../src/document/derive.js';
 import { createKeelDocument } from '../src/document/keel-document.js';
 import { SEED } from '../src/document/seed.js';
@@ -125,31 +127,64 @@ export default function EditorPage() {
     return undefined;
   }, [parsed, selectedId]);
 
-  return (
-    <main style={{ height: '100%', display: 'grid', gridTemplateColumns: '40% 1fr' }}>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateRows: '1fr auto',
-          borderRight: '1px solid var(--keel-border)',
-          minHeight: 0,
-        }}
-      >
-        <EditorPane document={keelDocument} viewRef={viewRef} />
-        <div style={{ borderTop: '1px solid var(--keel-border)', maxHeight: 160, minHeight: 0 }}>
-          <DiagnosticsList diagnostics={parsed.diagnostics} onGoTo={goTo} />
-        </div>
-      </div>
+  /**
+   * `Delete` 로 고른 노드를 지우고 `Esc` 로 선택을 푼다.
+   *
+   * **편집기 안에서 친 것은 건드리지 않는다.** 글자를 지우려고 누른 Delete 가
+   * 노드를 지워 버리면 되돌릴 수 있어도 무섭다.
+   */
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const inEditor = e.target instanceof HTMLElement && e.target.closest('.cm-editor') !== null;
+      const inField =
+        e.target instanceof HTMLElement &&
+        ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);
+      if (inEditor || inField) return;
 
-      <div style={{ position: 'relative', minWidth: 0 }}>
-        <CanvasPane document={keelDocument} selection={selection} onSelect={onSelect} />
-        <Inspector
-          target={target}
-          document={keelDocument}
-          onGoTo={goTo}
-          onCleared={clearSelection}
-        />
-      </div>
-    </main>
+      if (e.key === 'Escape') {
+        clearSelection();
+        return;
+      }
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && target?.kind === 'node') {
+        e.preventDefault();
+        removeNode(keelDocument, target.id);
+        clearSelection();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [clearSelection, keelDocument, target]);
+
+  return (
+    <Split
+      left={
+        <div
+          style={{
+            height: '100%',
+            display: 'grid',
+            gridTemplateRows: '1fr auto',
+            minHeight: 0,
+          }}
+        >
+          <EditorPane document={keelDocument} viewRef={viewRef} />
+          <div style={{ borderTop: '1px solid var(--keel-border)', maxHeight: 160, minHeight: 0 }}>
+            <DiagnosticsList diagnostics={parsed.diagnostics} onGoTo={goTo} />
+          </div>
+        </div>
+      }
+      right={
+        <>
+          <CanvasPane document={keelDocument} selection={selection} onSelect={onSelect} />
+          <Inspector
+            target={target}
+            document={keelDocument}
+            onGoTo={goTo}
+            onCleared={clearSelection}
+          />
+        </>
+      }
+    />
   );
 }

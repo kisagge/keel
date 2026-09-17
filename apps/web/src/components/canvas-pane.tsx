@@ -1,8 +1,8 @@
 'use client';
 
 import type { Hit } from '@keel/renderer';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { moveNode } from '../document/commands.js';
 import { createMeasure, parseSource, sceneOf } from '../document/derive.js';
 import type { KeelDocument } from '../document/keel-document.js';
@@ -67,6 +67,17 @@ export function CanvasPane({ document, selection, onSelect }: CanvasPaneProps) {
 
   const canvas = useCanvas({ sceneAt, selection });
   const { canvasRef, invalidate, viewportRef, toScreen, fit } = canvas;
+
+  const [canDraw, setCanDraw] = useState(true);
+
+  /** 캔버스 엘리먼트를 얻자마자 2D 컨텍스트가 나오는지 확인한다 */
+  const attach = useCallback(
+    (element: HTMLCanvasElement | null) => {
+      canvasRef(element);
+      if (element !== null) setCanDraw(element.getContext('2d') !== null);
+    },
+    [canvasRef],
+  );
 
   // 문서가 바뀌면 다시 그린다
   useEffect(() => {
@@ -217,14 +228,50 @@ export function CanvasPane({ document, selection, onSelect }: CanvasPaneProps) {
   return (
     <div ref={wheelTarget} style={{ position: 'relative', height: '100%', overflow: 'hidden' }}>
       <canvas
-        ref={canvasRef}
+        ref={attach}
         onPointerDown={onPointerDownHandler}
         onPointerMove={onPointerMoveHandler}
         onPointerUp={onPointerUpHandler}
         onPointerCancel={onPointerUpHandler}
         style={{ width: '100%', height: '100%', display: 'block', touchAction: 'none' }}
       />
+
+      {/* 캔버스를 못 쓰는 브라우저. 에디터는 그대로 쓸 수 있다 */}
+      {!canDraw && (
+        <p
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'grid',
+            placeItems: 'center',
+            margin: 0,
+            padding: 24,
+            textAlign: 'center',
+            color: 'var(--keel-muted)',
+          }}
+        >
+          이 브라우저에서는 캔버스를 그릴 수 없다. 왼쪽 텍스트는 그대로 고칠 수 있다.
+        </p>
+      )}
+
+      <button type="button" onClick={fit} style={fitButton}>
+        맞춤
+      </button>
+
       <TestHook sceneAt={sceneAt} viewportRef={viewportRef} />
     </div>
   );
 }
+
+const fitButton: CSSProperties = {
+  position: 'absolute',
+  right: 12,
+  bottom: 12,
+  padding: '6px 12px',
+  border: '1px solid var(--keel-border)',
+  borderRadius: 6,
+  background: 'var(--keel-surface)',
+  font: 'inherit',
+  fontSize: 12,
+  cursor: 'pointer',
+};
