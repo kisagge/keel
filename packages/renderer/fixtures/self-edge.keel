@@ -1,0 +1,7 @@
+# 자기 자신을 가리키는 선. 파서는 경고만 하고 엣지는 그래프에 들어온다
+service worker "작업자"
+queue retry "재시도 큐"
+
+worker -> worker "재시도"
+worker -> retry
+retry -> worker

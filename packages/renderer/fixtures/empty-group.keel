@@ -1,0 +1,10 @@
+# 비어 있는 그룹. 자손이 없어 경계를 유도할 것이 없다
+service outside "밖"
+
+group empty "아직 비었다" {
+}
+
+group holder "빈 것만 든 묶음" {
+  group inner "안쪽도 비었다" {
+  }
+}

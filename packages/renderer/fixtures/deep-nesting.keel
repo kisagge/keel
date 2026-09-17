@@ -1,0 +1,14 @@
+# 여백이 최솟값까지 줄어드는 깊이
+group l1 "한 겹" {
+  service top "맨 위"
+
+  group l2 "두 겹" {
+    group l3 "세 겹" {
+      group l4 "네 겹" {
+        db deep "가장 안쪽"
+      }
+    }
+  }
+}
+
+top -> deep "가로지른다"

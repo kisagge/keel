@@ -1,0 +1,608 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`픽스처 전수 렌더 > dsl/labels-and-escapes.keel > 장면 요약이 그대로다 1`] = `
+{
+  "edges": [
+    {
+      "arrow": true,
+      "key": "a b 0",
+      "kind": "straight",
+      "label": "화살표 -> 는 라벨 안에서 글…",
+      "points": 2,
+    },
+    {
+      "arrow": false,
+      "key": "b c 0",
+      "kind": "straight",
+      "label": undefined,
+      "points": 2,
+    },
+  ],
+  "groups": [],
+  "nodes": [
+    {
+      "id": "a",
+      "label": "따옴표 " 가 들어간 이름",
+      "rect": [
+        0,
+        0,
+        183,
+        44,
+      ],
+    },
+    {
+      "id": "b",
+      "label": "역슬래시 \\ 도",
+      "rect": [
+        223,
+        0,
+        118,
+        44,
+      ],
+    },
+    {
+      "id": "c",
+      "label": "c",
+      "rect": [
+        381,
+        0,
+        96,
+        44,
+      ],
+    },
+  ],
+}
+`;
+
+exports[`픽스처 전수 렌더 > dsl/minimal.keel > 장면 요약이 그대로다 1`] = `
+{
+  "edges": [
+    {
+      "arrow": true,
+      "key": "web api 0",
+      "kind": "straight",
+      "label": undefined,
+      "points": 2,
+    },
+  ],
+  "groups": [],
+  "nodes": [
+    {
+      "id": "web",
+      "label": "web",
+      "rect": [
+        0,
+        0,
+        96,
+        44,
+      ],
+    },
+    {
+      "id": "api",
+      "label": "api",
+      "rect": [
+        136,
+        0,
+        96,
+        44,
+      ],
+    },
+  ],
+}
+`;
+
+exports[`픽스처 전수 렌더 > dsl/nested-groups.keel > 장면 요약이 그대로다 1`] = `
+{
+  "edges": [
+    {
+      "arrow": true,
+      "key": "gateway lb 0",
+      "kind": "straight",
+      "label": undefined,
+      "points": 2,
+    },
+    {
+      "arrow": true,
+      "key": "lb api 0",
+      "kind": "straight",
+      "label": undefined,
+      "points": 2,
+    },
+    {
+      "arrow": true,
+      "key": "api main 0",
+      "kind": "straight",
+      "label": undefined,
+      "points": 2,
+    },
+  ],
+  "groups": [
+    {
+      "empty": false,
+      "id": "cloud",
+      "rect": [
+        0,
+        84,
+        354,
+        256,
+      ],
+    },
+    {
+      "empty": false,
+      "id": "core",
+      "rect": [
+        24,
+        214,
+        306,
+        102,
+      ],
+    },
+  ],
+  "nodes": [
+    {
+      "id": "gateway",
+      "label": "gateway",
+      "rect": [
+        0,
+        0,
+        96,
+        44,
+      ],
+    },
+    {
+      "id": "lb",
+      "label": "로드밸런서",
+      "rect": [
+        24,
+        130,
+        102,
+        44,
+      ],
+    },
+    {
+      "id": "api",
+      "label": "api",
+      "rect": [
+        42,
+        254,
+        96,
+        44,
+      ],
+    },
+    {
+      "id": "main",
+      "label": "주 데이터베이…",
+      "rect": [
+        178,
+        254,
+        134,
+        44,
+      ],
+    },
+  ],
+}
+`;
+
+exports[`픽스처 전수 렌더 > dsl/order-flow.keel > 장면 요약이 그대로다 1`] = `
+{
+  "edges": [
+    {
+      "arrow": true,
+      "key": "user web 0",
+      "kind": "straight",
+      "label": "주문하기",
+      "points": 2,
+    },
+    {
+      "arrow": true,
+      "key": "web api 0",
+      "kind": "straight",
+      "label": undefined,
+      "points": 2,
+    },
+    {
+      "arrow": true,
+      "key": "api orders 0",
+      "kind": "straight",
+      "label": "주문 저장",
+      "points": 2,
+    },
+    {
+      "arrow": true,
+      "key": "api pay 0",
+      "kind": "straight",
+      "label": "결제 요청",
+      "points": 2,
+    },
+    {
+      "arrow": true,
+      "key": "pay toss 0",
+      "kind": "straight",
+      "label": undefined,
+      "points": 2,
+    },
+    {
+      "arrow": true,
+      "key": "api events 0",
+      "kind": "straight",
+      "label": "order.created",
+      "points": 2,
+    },
+  ],
+  "groups": [
+    {
+      "empty": false,
+      "id": "payment",
+      "rect": [
+        -0,
+        168,
+        310,
+        114,
+      ],
+    },
+  ],
+  "nodes": [
+    {
+      "id": "user",
+      "label": "손님",
+      "rect": [
+        0,
+        0,
+        96,
+        44,
+      ],
+    },
+    {
+      "id": "web",
+      "label": "스토어프론트",
+      "rect": [
+        136,
+        0,
+        116,
+        44,
+      ],
+    },
+    {
+      "id": "api",
+      "label": "주문 API",
+      "rect": [
+        292,
+        0,
+        96,
+        44,
+      ],
+    },
+    {
+      "id": "orders",
+      "label": "주문 DB",
+      "rect": [
+        428,
+        0,
+        96,
+        44,
+      ],
+    },
+    {
+      "id": "events",
+      "label": "이벤트 큐",
+      "rect": [
+        0,
+        84,
+        96,
+        44,
+      ],
+    },
+    {
+      "id": "pay",
+      "label": "결제 서비스",
+      "rect": [
+        24,
+        214,
+        106,
+        44,
+      ],
+    },
+    {
+      "id": "toss",
+      "label": "토스페이먼츠",
+      "rect": [
+        170,
+        214,
+        116,
+        44,
+      ],
+    },
+  ],
+}
+`;
+
+exports[`픽스처 전수 렌더 > renderer/deep-nesting.keel > 장면 요약이 그대로다 1`] = `
+{
+  "edges": [
+    {
+      "arrow": true,
+      "key": "top deep 0",
+      "kind": "straight",
+      "label": "가로지른다",
+      "points": 2,
+    },
+  ],
+  "groups": [
+    {
+      "empty": false,
+      "id": "l1",
+      "rect": [
+        0,
+        0,
+        224,
+        344,
+      ],
+    },
+    {
+      "empty": false,
+      "id": "l2",
+      "rect": [
+        24,
+        130,
+        176,
+        190,
+      ],
+    },
+    {
+      "empty": false,
+      "id": "l3",
+      "rect": [
+        42,
+        170,
+        140,
+        132,
+      ],
+    },
+    {
+      "empty": false,
+      "id": "l4",
+      "rect": [
+        54,
+        204,
+        116,
+        86,
+      ],
+    },
+  ],
+  "nodes": [
+    {
+      "id": "top",
+      "label": "맨 위",
+      "rect": [
+        24,
+        46,
+        96,
+        44,
+      ],
+    },
+    {
+      "id": "deep",
+      "label": "가장 안쪽",
+      "rect": [
+        64,
+        236,
+        96,
+        44,
+      ],
+    },
+  ],
+}
+`;
+
+exports[`픽스처 전수 렌더 > renderer/empty-group.keel > 장면 요약이 그대로다 1`] = `
+{
+  "edges": [],
+  "groups": [
+    {
+      "empty": false,
+      "id": "holder",
+      "rect": [
+        0,
+        204,
+        208,
+        150,
+      ],
+    },
+    {
+      "empty": true,
+      "id": "inner",
+      "rect": [
+        24,
+        250,
+        160,
+        80,
+      ],
+    },
+    {
+      "empty": true,
+      "id": "empty",
+      "rect": [
+        0,
+        84,
+        160,
+        80,
+      ],
+    },
+  ],
+  "nodes": [
+    {
+      "id": "outside",
+      "label": "밖",
+      "rect": [
+        0,
+        0,
+        96,
+        44,
+      ],
+    },
+  ],
+}
+`;
+
+exports[`픽스처 전수 렌더 > renderer/long-labels.keel > 장면 요약이 그대로다 1`] = `
+{
+  "edges": [
+    {
+      "arrow": true,
+      "key": "verylong alsolong 0",
+      "kind": "straight",
+      "label": "이 선의 라벨도 꽤 길어서 잘…",
+      "points": 2,
+    },
+    {
+      "arrow": true,
+      "key": "alsolong short 0",
+      "kind": "straight",
+      "label": undefined,
+      "points": 2,
+    },
+  ],
+  "groups": [],
+  "nodes": [
+    {
+      "id": "verylong",
+      "label": "아주 긴 이름을 가진 서비스라서 상자…",
+      "rect": [
+        0,
+        0,
+        280,
+        44,
+      ],
+    },
+    {
+      "id": "alsolong",
+      "label": "이쪽도 만만치 않게 긴 데이터베이스 …",
+      "rect": [
+        320,
+        0,
+        280,
+        44,
+      ],
+    },
+    {
+      "id": "short",
+      "label": "짧",
+      "rect": [
+        640,
+        0,
+        96,
+        44,
+      ],
+    },
+  ],
+}
+`;
+
+exports[`픽스처 전수 렌더 > renderer/parallel-edges.keel > 장면 요약이 그대로다 1`] = `
+{
+  "edges": [
+    {
+      "arrow": true,
+      "key": "a b 0",
+      "kind": "straight",
+      "label": "첫째",
+      "points": 3,
+    },
+    {
+      "arrow": true,
+      "key": "a b 1",
+      "kind": "straight",
+      "label": "둘째",
+      "points": 3,
+    },
+    {
+      "arrow": true,
+      "key": "b a 0",
+      "kind": "straight",
+      "label": "되돌림",
+      "points": 3,
+    },
+    {
+      "arrow": false,
+      "key": "a b 2",
+      "kind": "straight",
+      "label": undefined,
+      "points": 3,
+    },
+  ],
+  "groups": [],
+  "nodes": [
+    {
+      "id": "a",
+      "label": "서비스 가",
+      "rect": [
+        0,
+        0,
+        96,
+        44,
+      ],
+    },
+    {
+      "id": "b",
+      "label": "서비스 나",
+      "rect": [
+        136,
+        0,
+        96,
+        44,
+      ],
+    },
+  ],
+}
+`;
+
+exports[`픽스처 전수 렌더 > renderer/self-edge.keel > 장면 요약이 그대로다 1`] = `
+{
+  "edges": [
+    {
+      "arrow": true,
+      "key": "worker worker 0",
+      "kind": "self",
+      "label": "재시도",
+      "points": 5,
+    },
+    {
+      "arrow": true,
+      "key": "worker retry 0",
+      "kind": "straight",
+      "label": undefined,
+      "points": 3,
+    },
+    {
+      "arrow": true,
+      "key": "retry worker 0",
+      "kind": "straight",
+      "label": undefined,
+      "points": 3,
+    },
+  ],
+  "groups": [],
+  "nodes": [
+    {
+      "id": "worker",
+      "label": "작업자",
+      "rect": [
+        0,
+        0,
+        96,
+        44,
+      ],
+    },
+    {
+      "id": "retry",
+      "label": "재시도 큐",
+      "rect": [
+        136,
+        0,
+        96,
+        44,
+      ],
+    },
+  ],
+}
+`;

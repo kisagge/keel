@@ -1,0 +1,7 @@
+# 상자 최대 너비에 걸리는 이름들
+service verylong "아주 긴 이름을 가진 서비스라서 상자가 최대 너비에 걸린다"
+db alsolong "이쪽도 만만치 않게 긴 데이터베이스 이름을 달고 있다"
+external short "짧"
+
+verylong -> alsolong "이 선의 라벨도 꽤 길어서 잘려야 한다 정말로 길다"
+alsolong -> short
