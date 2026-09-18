@@ -22,6 +22,6 @@
    * 이 프로젝트에도 들고 공유 eslint 프리셋의 `allowDefaultProject` 에도 들어,
    * typescript-eslint 가 파싱을 거부한다. 다른 패키지들도 `src`·`test` 만 넣는다.
    */
-  "include": ["next-env.d.ts", "app/**/*", "src/**/*", "test/**/*"],
+  "include": ["next-env.d.ts", "types/**/*", "app/**/*", "src/**/*", "test/**/*"],
   "exclude": ["node_modules", ".next"]
 }

@@ -38,3 +38,7 @@ apps/*/CLAUDE.md
 # `worktrees/` 에는 워크트리가 통째로 들어앉는다. 무시하지 않으면 저장소가
 # 제 사본을 제 안에 커밋하게 된다.
 .claude/
+
+# next dev / next build 가 서로 다르게 다시 쓰는 파일 — 추적하면 e2e 마다 더러워진다.
+# 실제로 필요한 앰비언트 참조는 apps/web/types/next.d.ts 에 고정해 두었다.
+apps/web/next-env.d.ts
