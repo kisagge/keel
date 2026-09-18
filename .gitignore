@@ -16,3 +16,7 @@ blob-report/
 .cache/
 
 .DS_Store
+
+# Claude Code 로컬 설정 (토큰 등 비밀값 포함)
+.claude/settings.local.json
+.claude/worktrees/
