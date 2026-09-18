@@ -23,5 +23,3 @@ blob-report/
 
 # Playwright MCP 디버그 스크린샷
 .playwright-mcp/
-/edge-click.png
-/group-click.png
