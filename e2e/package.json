@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "e2e": "playwright test",
+    "e2e": "node ../scripts/guard-dev-server.mjs && playwright test",
     "e2e:install": "playwright install chromium",
     "typecheck": "tsc --noEmit"
   },
