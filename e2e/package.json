@@ -1,0 +1,17 @@
+{
+  "name": "@keel/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "e2e": "node ../scripts/guard-dev-server.mjs && playwright test",
+    "e2e:install": "playwright install chromium",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@keel/config": "workspace:*",
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.9.2",
+    "typescript": "6.0.3"
+  }
+}

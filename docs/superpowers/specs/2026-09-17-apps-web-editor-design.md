@@ -264,11 +264,17 @@ DOM 이벤트가 필요 없다.
 `y-codemirror.next 0.3.6` · `codemirror 6` (`@codemirror/state` · `view` · `lint` ·
 `commands`) · `@keel/dsl` · `@keel/graph` · `@keel/renderer` (`workspace:*`).
 
-- `next.config.ts` 에 **`transpilePackages: ['@keel/dsl', '@keel/graph', '@keel/renderer']`**.
-  세 패키지가 빌드 없이 생 `.ts` 를 내보내므로 이걸 빼면 Next 가 워크스페이스
-  소스를 못 읽는다.
-- `tsconfig.json` 은 `@keel/config/tsconfig/next.json` 을 잇는다 (DOM·WebWorker
-  lib 과 Next 플러그인이 이미 들어 있다).
+- `tsconfig.json` 은 `@keel/config/tsconfig/next.json` 을 잇되 **`module`·
+  `moduleResolution` 을 `nodenext` 로 덮어쓴다.** 세 패키지가 상대 경로를
+  `./cull.js` 처럼 적는데, Turbopack 이 그것을 `cull.ts` 로 바꿔 찾으려면
+  `nodenext` 여야 한다 — 공유 프리셋의 `bundler` 로 두면 `@keel/renderer` 의
+  재수출 전부가 "모듈을 못 찾는다" 로 빌드를 깬다. (구현하며 확인한 것이다.
+  처음에는 `transpilePackages` 가 관문일 것으로 적어 두었으나 아니었다 —
+  Next 16 의 Turbopack 은 워크스페이스 소스를 그대로 읽으므로 그 설정은
+  넣으나 빼나 결과가 같고, `next.config.ts` 는 비워 둔다.)
+- `tsconfig.json` 의 `include` 에 `*.ts` 를 넣지 않는다. 넣으면
+  `next.config.ts` 와 `vitest.config.ts` 가 이 프로젝트에도 들고 공유 eslint
+  프리셋의 `allowDefaultProject` 에도 들어 typescript-eslint 가 파싱을 거부한다.
 - `eslint.config.js` 는 `@keel/config/eslint/react` 의 `reactConfig`.
 - `pnpm-workspace.yaml` 의 globs 에 **`e2e` 를 더한다.** 지금 `apps/*` 와
   `packages/*` 뿐이라 turbo 의 `e2e` 태스크가 돌 곳이 없다.

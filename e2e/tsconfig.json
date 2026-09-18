@@ -1,0 +1,11 @@
+{
+  "extends": "@keel/config/tsconfig/base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    // page.evaluate 콜백이 브라우저 쪽 window 를 가리킨다 — Node 전용
+    // base.json 의 lib 에는 DOM 이 없어 `window` 를 못 찾는다.
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["*.ts"]
+}

@@ -18,7 +18,7 @@
 - **`verbatimModuleSyntax: true`** — 타입은 반드시 `import type`.
 - **`noUncheckedIndexedAccess`·`exactOptionalPropertyTypes` 켜져 있다** — 배열 인덱싱 결과는 `| undefined`, 선택 속성은 `?: T | undefined` 로 적는다.
 - **상대 경로 import 는 `.js` 확장자로 끝난다** (ESM). 예: `./text-edits.js`.
-- **`@keel/*` 패키지는 빌드 없이 생 `.ts` 를 내보낸다.** Next 는 `transpilePackages` 가 필요하고, Vitest 는 그대로 읽는다.
+- **`@keel/*` 패키지는 빌드 없이 생 `.ts` 를 내보내고, 상대 경로를 `./cull.js` 처럼 적는다.** Vitest 는 그대로 읽는다. Turbopack 은 `apps/web/tsconfig.json` 의 `moduleResolution: nodenext` 가 있어야 읽는다 — `transpilePackages` 로는 안 된다.
 - **jsdom·happy-dom 을 저장소에 들이지 않는다.** React 컴포넌트 단위 검사는 하지 않고, 검사할 값어치가 있는 것은 전부 `src/document/`·`src/interaction/` 의 순수 모듈로 내린다.
 - **주석과 검사 이름은 한국어로 쓴다.** 기존 패키지와 같은 어조 — 무엇을 하는지가 아니라 **왜 그렇게 했는지**를 적는다.
 - **각 태스크를 커밋하기 전에 고친 것을 되돌려 검사가 실제로 지는지 확인한다.** 이것이 이 저장소의 방식이고, 앞선 판에서 아무것도 묶지 못하는 검사를 실제로 잡아냈다.
@@ -30,7 +30,7 @@
 
 | 파일 | 책임 |
 |---|---|
-| `apps/web/package.json` · `next.config.ts` · `tsconfig.json` · `eslint.config.js` · `vitest.config.ts` | 앱 설정. `transpilePackages` 가 여기 있다 |
+| `apps/web/package.json` · `next.config.ts` · `tsconfig.json` · `eslint.config.js` · `vitest.config.ts` | 앱 설정. Turbopack 이 `./x.js` 를 `x.ts` 로 찾게 하는 `moduleResolution: nodenext` 가 여기 있다 |
 | `apps/web/app/layout.tsx` · `page.tsx` · `globals.css` | App Router 뼈대. `page.tsx` 가 `'use client'` 화면 |
 | `apps/web/src/document/text-edits.ts` | `applyTextEdits` — 이 판의 핵심. Y.Text 에 구간 수정을 얹는다 |
 | `apps/web/src/document/keel-document.ts` | `Y.Doc` 배선과 하나짜리 되돌리기 역사 |
@@ -140,12 +140,18 @@ Expected: FAIL — `apps/web` 이 아직 워크스페이스가 아니라 `vitest
 import type { NextConfig } from 'next';
 
 /**
- * `@keel/*` 는 빌드 없이 생 `.ts` 를 내보낸다(`exports` 가 `./src/index.ts` 를 가리킨다).
- * 그래서 Next 가 직접 옮겨 담아야 한다 — 이걸 빼면 워크스페이스 소스를 못 읽는다.
+ * 비어 있다.
+ *
+ * `@keel/*` 는 빌드 없이 생 `.ts` 를 내보내는데(`exports` 가 `./src/index.ts` 를
+ * 가리킨다), Next 16 의 Turbopack 은 워크스페이스 소스를 그대로 읽으므로
+ * `transpilePackages` 가 필요 없다. 넣어도 결과가 같은 것을 확인했다.
+ *
+ * 대신 걸리는 것은 **`tsconfig.json` 의 `moduleResolution`** 이다. 이 저장소의
+ * 패키지들은 상대 경로를 `./cull.js` 처럼 적는데(ESM 관례), Turbopack 이 그것을
+ * `cull.ts` 로 바꿔 찾으려면 `nodenext` 여야 한다. 공유 프리셋은 `bundler` 라
+ * `apps/web/tsconfig.json` 에서만 덮어쓴다 — 거기 그 이유를 적어 두었다.
  */
-const config: NextConfig = {
-  transpilePackages: ['@keel/dsl', '@keel/graph', '@keel/renderer'],
-};
+const config: NextConfig = {};
 
 export default config;
 ```
@@ -157,9 +163,27 @@ export default config;
   "extends": "@keel/config/tsconfig/next.json",
   "compilerOptions": {
     "types": ["node"],
+
+    /**
+     * 공유 프리셋은 `bundler` 인데 여기서만 `nodenext` 로 덮어쓴다.
+     *
+     * 이 저장소의 패키지들은 상대 경로를 `./cull.js` 처럼 적는다(ESM 관례).
+     * Turbopack 이 그것을 `cull.ts` 로 바꿔 찾아 주려면 `nodenext` 여야 한다 —
+     * `bundler` 로 두면 `@keel/renderer` 의 재수출 전부가 "모듈을 못 찾는다" 로
+     * 빌드를 깬다. `transpilePackages` 로는 안 고쳐진다(그쪽은 필요도 없다).
+     */
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["next-env.d.ts", "app/**/*", "src/**/*", "test/**/*", "*.ts"],
+
+  /**
+   * `*.ts` 를 넣지 않는다. 넣으면 `next.config.ts` 와 `vitest.config.ts` 가
+   * 이 프로젝트에도 들고 공유 eslint 프리셋의 `allowDefaultProject` 에도 들어,
+   * typescript-eslint 가 파싱을 거부한다. 다른 패키지들도 `src`·`test` 만 넣는다.
+   */
+  "include": ["next-env.d.ts", "app/**/*", "src/**/*", "test/**/*"],
   "exclude": ["node_modules", ".next"]
 }
 ```
@@ -183,12 +207,22 @@ export default defineConfig({
 });
 ```
 
-`apps/web/next-env.d.ts`:
+`apps/web/next-env.d.ts` — 두 줄로 만들어 두되 **글자를 붙들지 않는다.**
 
 ```ts
 /// <reference types="next" />
 /// <reference types="next/image-types/global" />
 ```
+
+이 파일은 **Next 가 관리한다.** `next build`/`next dev` 가 처음 돌 때 타입 있는
+라우트를 가리키는 줄과 "편집하지 말라" 는 주석을 스스로 덧붙인다. 커밋에는
+**빌드를 한 번 돌린 뒤의 내용**을 넣는다 — 두 줄짜리를 커밋하면 빌드를 돌릴
+때마다 워킹 트리가 더러워진다.
+
+덧붙는 줄이 `./.next/types/...` 를 가리키는데 `.next/` 는 무시되는 폴더라 새로
+받은 저장소에는 그 파일이 없다. 그래도 `tsc` 는 안 깨진다 — 부수 효과만 있는
+import 는 `noUncheckedSideEffectImports` 를 켜야 못 찾는 것을 문제 삼고, 이
+저장소는 안 켜 두었다. `.next/` 를 지우고 `pnpm typecheck` 를 돌려 확인했다.
 
 - [ ] **Step 4: 화면 뼈대 셋을 쓴다**
 
@@ -255,7 +289,7 @@ export default function EditorPage() {
 ```
 
 `DEFAULT_THEME` 을 화면에 쓰는 것은 일부러다. 이 값이 브라우저에 뜨면
-`transpilePackages` 가 실제로 돌았다는 뜻이다.
+Turbopack 이 워크스페이스 소스를 실제로 읽었다는 뜻이다.
 
 - [ ] **Step 5: 설치하고 검사가 통과하는 것을 본다**
 
@@ -265,12 +299,18 @@ Expected: PASS (1 test)
 - [ ] **Step 6: 빌드와 타입·린트를 확인한다**
 
 Run: `cd /Users/kisagge/my-projects/keel && pnpm typecheck && pnpm lint && pnpm --filter @keel/web build`
-Expected: 셋 다 성공. 빌드가 통과하면 `transpilePackages` 가 실제로 돈 것이다.
+Expected: 셋 다 성공.
 
-- [ ] **Step 7: `transpilePackages` 를 빼 보고 빌드가 지는 것을 확인한 뒤 되돌린다**
+- [ ] **Step 7: 진짜 관문이 무엇인지 되돌려 확인한다**
 
-Run: `next.config.ts` 에서 `transpilePackages` 줄을 지우고 `pnpm --filter @keel/web build`
-Expected: FAIL. 확인 후 되돌린다.
+`apps/web/tsconfig.json` 에서 `module`·`moduleResolution` 두 줄을 지우고
+(공유 프리셋의 `bundler` 로 떨어뜨린 뒤) `pnpm --filter @keel/web build`.
+
+Expected: FAIL — `@keel/renderer/src/index.ts` 의 상대 재수출마다
+`Module not found: Can't resolve './cull.js'` 가 난다. 확인 후 되돌린다.
+
+`transpilePackages` 는 **관문이 아니다.** Next 16 의 Turbopack 은 워크스페이스
+소스를 그대로 읽는다 — 넣으나 빼나 결과가 같다.
 
 - [ ] **Step 8: 커밋**
 
@@ -279,8 +319,18 @@ git add apps/web pnpm-lock.yaml
 git commit -F - <<'EOF'
 web: 앱 뼈대 — 세 패키지가 화면 쪽에서 이어진다
 
-@keel/dsl·graph·renderer 는 빌드 없이 생 .ts 를 내보내므로 Next 의
-transpilePackages 에 셋을 적어야 한다. 빼고 빌드해 지는 것을 확인했다.
+@keel/dsl·graph·renderer 는 빌드 없이 생 .ts 를 내보내고 상대 경로를 ./cull.js
+처럼 적는다. Turbopack 이 그것을 cull.ts 로 바꿔 찾으려면 moduleResolution 이
+nodenext 여야 한다 — 공유 프리셋의 bundler 로 두면 renderer 의 재수출 전부가
+"모듈을 못 찾는다" 로 빌드를 깬다. 두 줄을 지워 지는 것을 확인했다.
+
+transpilePackages 는 필요 없었다. 넣으나 빼나 빌드가 같으므로 next.config.ts 는
+비워 두고 왜 비었는지를 거기 적었다. 안 쓰는 설정을 "이게 없으면 안 된다" 는
+주석과 함께 두는 것이 더 나쁘다.
+
+tsconfig 의 include 에 *.ts 를 넣지 않는다. 넣으면 next.config.ts 와
+vitest.config.ts 가 이 프로젝트에도 들고 공유 eslint 프리셋의
+allowDefaultProject 에도 들어, typescript-eslint 가 파싱을 거부한다.
 
 첫 검사는 세 패키지를 그대로 불러 장면을 세우는 것 하나다. 이어지지 않으면
 화면을 만들 것도 없으므로 가장 먼저 묶는다.
@@ -376,6 +426,50 @@ describe('구간 수정 얹기', () => {
   });
 
   /**
+   * `delete`·`insert` 는 하나하나가 제 트랜잭션을 연다. 안 묶으면 수정 둘이
+   * 갱신 **넷**으로 날아가고, 실시간 판에서 남의 화면이 반쯤 고쳐진 문서를
+   * 실제로 본다.
+   */
+  it('수정이 여럿이어도 갱신은 한 번이다', () => {
+    const doc = new Y.Doc();
+    const ytext = doc.getText('source');
+    ytext.insert(0, 'aaa bbb ccc');
+
+    let updates = 0;
+    doc.on('update', () => {
+      updates += 1;
+    });
+
+    applyTextEdits(ytext, [
+      { from: 0, to: 3, insert: 'XXXXX' },
+      { from: 8, to: 11, insert: 'Z' },
+    ]);
+
+    expect(updates).toBe(1);
+    expect(ytext.toString()).toBe('XXXXX bbb Z');
+  });
+
+  /** 부르는 쪽이 이미 트랜잭션 안이면 바깥 것에 합쳐지고 origin 도 지켜진다 */
+  it('바깥 트랜잭션 안에서 불러도 그 origin 을 지킨다', () => {
+    const doc = new Y.Doc();
+    const ytext = doc.getText('source');
+    ytext.insert(0, 'service a');
+
+    const OUTER = Symbol('바깥');
+    const origins: unknown[] = [];
+    doc.on('afterTransaction', (transaction: Y.Transaction) => {
+      origins.push(transaction.origin);
+    });
+
+    doc.transact(() => {
+      applyTextEdits(ytext, [{ from: 8, to: 9, insert: 'b' }]);
+    }, OUTER);
+
+    expect(origins).toEqual([OUTER]);
+    expect(ytext.toString()).toBe('service b');
+  });
+
+  /**
    * `dsl` 의 `applyEdits` 는 문자열 사본에 얹으므로 중간에 던져도 남는 것이 없다.
    * 여기는 **여럿이 함께 보는 문서**를 직접 고치므로, 반쯤 고치다 던지면 남의
    * 화면에 깨진 문서가 남는다. 그래서 먼저 전부 검사하고 그다음에 얹는다.
@@ -423,12 +517,23 @@ import type * as Y from 'yjs';
  *
  * 내림차순으로 가면 앞쪽 오프셋이 그대로 맞는다. 앞에서부터 가면 수정 하나마다
  * 뒤쪽 자리를 전부 다시 세어야 한다.
- */
+ *
+ * ## 한 트랜잭션으로 묶는다
+ *
+ * `Y.Text` 의 `delete`·`insert` 는 하나하나가 제 트랜잭션을 연다. 안 묶으면
+ * 수정 두 개가 갱신 **네 번**으로 날아가고(직접 재 봤다), 실시간 판에서 남의
+ * 화면은 반쯤 고쳐진 문서를 실제로 본다 — 이 함수가 막겠다고 적어 둔 바로
+ * 그것이 예외가 날 때만이 아니라 평소에도 새는 셈이다.
+ *
+ * 부르는 쪽이 이미 트랜잭션 안이면(`commands.ts` 가 그렇다) 중첩이 되는데,
+ * Yjs 는 그것을 바깥 것에 합치고 **바깥 origin 을 지킨다.** 확인했다 —
+ * 그래서 되돌리기가 보는 origin 이 안 바뀐다.
 export function applyTextEdits(ytext: Y.Text, edits: readonly TextEdit[]): void {
   if (edits.length === 0) return;
 
   const sorted = [...edits].sort((a, b) => b.from - a.from || b.to - a.to);
 
+  // 검사는 트랜잭션 **밖**에서 한다 — 던지면 트랜잭션을 아예 열지 않는다
   let previousFrom = Number.POSITIVE_INFINITY;
   for (const edit of sorted) {
     if (edit.to > previousFrom) {
@@ -437,10 +542,20 @@ export function applyTextEdits(ytext: Y.Text, edits: readonly TextEdit[]): void 
     previousFrom = edit.from;
   }
 
-  for (const edit of sorted) {
-    if (edit.to > edit.from) ytext.delete(edit.from, edit.to - edit.from);
-    if (edit.insert.length > 0) ytext.insert(edit.from, edit.insert);
+  const apply = (): void => {
+    for (const edit of sorted) {
+      if (edit.to > edit.from) ytext.delete(edit.from, edit.to - edit.from);
+      if (edit.insert.length > 0) ytext.insert(edit.from, edit.insert);
+    }
+  };
+
+  const doc = ytext.doc;
+  if (doc === null) {
+    // 문서에 안 붙은 Y.Text. 묶을 트랜잭션이 없으니 그냥 얹는다
+    apply();
+    return;
   }
+  doc.transact(apply);
 }
 ```
 
@@ -455,6 +570,7 @@ Expected: PASS (5 tests)
 
 1. 정렬을 오름차순(`a.from - b.from`)으로 바꾼다 → `여러 군데를 한 번에 고쳐도…` 가 져야 한다
 2. 검사 고리를 지우고 얹기 고리 안에서 던지게 한다 → `겹치는 수정은 던지고, 문서는 손도 안 댄 채로…` 가 져야 한다
+3. `doc.transact(apply)` 를 `apply()` 로 바꾼다 → `수정이 여럿이어도 갱신은 한 번이다` 가 져야 한다 (갱신이 4번 난다)
 
 Expected: 둘 다 FAIL. 확인 후 되돌린다.
 
@@ -473,8 +589,13 @@ packages/dsl 의 설계 전부가 이 함수 하나를 위해 있었다. 통째�
 중간에 던져도 남는 것이 없지만, 여기는 여럿이 함께 보는 문서를 직접 고친다 —
 반쯤 고치다 던지면 남의 화면에 깨진 문서가 남고 그대로 퍼진다.
 
-정렬을 오름차순으로 바꾸고, 검사 고리를 얹기 고리 안으로 옮겨 각각 검사가
-지는 것을 확인했다.
+수정 여럿을 한 트랜잭션으로 묶는다. Y.Text 의 delete·insert 는 하나하나가 제
+트랜잭션을 열어서, 안 묶으면 수정 두 개가 갱신 네 번으로 날아간다 — 실시간
+판에서 남의 화면이 반쯤 고쳐진 문서를 실제로 본다. 부르는 쪽이 이미 트랜잭션
+안이면 중첩이 바깥 것에 합쳐지고 바깥 origin 도 지켜지는 것을 검사로 묶었다.
+
+정렬을 오름차순으로, 검사 고리를 얹기 고리 안으로, 트랜잭션 묶기를 빼는 것
+셋으로 각각 검사가 지는 것을 확인했다.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
@@ -501,7 +622,7 @@ EOF
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { KEEL_LOCAL, createKeelDocument } from '../src/document/keel-document.js';
+import { KEEL_LOCAL, KEEL_SEED, createKeelDocument } from '../src/document/keel-document.js';
 
 describe('문서 배선', () => {
   it('씨앗을 소스에 넣고 시작한다', () => {
@@ -524,6 +645,21 @@ describe('문서 배선', () => {
     const document = createKeelDocument('service a');
     document.undoManager.undo();
     expect(document.source.toString()).toBe('service a');
+    document.destroy();
+  });
+
+  /**
+   * 위 검사는 **순서**가 지켜 준다 — 씨앗이 `UndoManager` 보다 먼저 들어간다.
+   * origin 을 따로 둔 값은 여기서 나온다: 이미 살아 있는 되돌리기 옆에 얹어도
+   * 안 되돌아가야 한다. 서버에서 받은 문서를 얹을 때가 그 자리다.
+   */
+  it('되돌리기가 살아 있는 동안 넣은 것도 KEEL_SEED 면 안 되돌아간다', () => {
+    const document = createKeelDocument('service a');
+
+    document.doc.transact(() => document.source.insert(9, ' "나중"'), KEEL_SEED);
+    document.undoManager.undo();
+
+    expect(document.source.toString()).toBe('service a "나중"');
     document.destroy();
   });
 
@@ -552,16 +688,42 @@ describe('문서 배선', () => {
   /**
    * 역사가 둘로 나뉘면 사람이 "방금 뭘 되돌렸는지" 를 못 따라간다.
    * 친 글자와 끈 노드가 한 역사여야 한다.
+   *
+   * **`stopCapturing()` 이 걸음의 경계다.** Yjs 는 짧은 사이에 일어난 수정을
+   * 한 걸음으로 묶는다(기본 500ms) — 글자를 칠 때는 그게 맞다. 대신 캔버스
+   * 조작처럼 "한 번의 행동" 이 끝난 자리에서는 경계를 그어 준다.
+   * `commands.ts` 가 명령마다 이것을 부른다.
    */
   it('텍스트와 레이아웃이 한 역사로 되돌아간다', () => {
     const document = createKeelDocument('service a');
 
     document.doc.transact(() => document.source.insert(9, ' "하나"'), KEEL_LOCAL);
+    document.undoManager.stopCapturing();
     document.doc.transact(() => document.layout.set('a', { x: 1, y: 2 }), KEEL_LOCAL);
 
     document.undoManager.undo();
     expect(document.layout.get('a')).toBeUndefined();
     expect(document.source.toString()).toBe('service a "하나"');
+
+    document.undoManager.undo();
+    expect(document.source.toString()).toBe('service a');
+    document.destroy();
+  });
+
+  /**
+   * 반대쪽도 묶어 둔다 — **빠르게 친 글자는 한 걸음으로 합쳐져야 한다.**
+   *
+   * `captureTimeout: 0` 을 주면 이 검사가 진다. 그 값이면 `Cmd+Z` 가 글자를
+   * 한 자씩 지워, 편집기로 쓸 수 없는 물건이 된다. 경계를 세우고 싶으면
+   * 시간을 0 으로 만드는 게 아니라 `stopCapturing()` 을 부른다.
+   */
+  it('빠르게 친 글자는 한 걸음으로 묶인다', () => {
+    const document = createKeelDocument('service a');
+
+    for (const ch of ' "이름"') {
+      document.doc.transact(() => document.source.insert(document.source.length, ch), KEEL_LOCAL);
+    }
+    expect(document.source.toString()).toBe('service a "이름"');
 
     document.undoManager.undo();
     expect(document.source.toString()).toBe('service a');
@@ -625,10 +787,17 @@ import * as Y from 'yjs';
 export const KEEL_LOCAL = Symbol('keel-local');
 
 /**
- * 씨앗을 넣을 때 쓰는 origin. **일부러 추적하지 않는다** —
- * 되돌릴 수 있게 두면 화면을 열자마자 Cmd+Z 한 번에 문서가 통째로 사라진다.
+ * 씨앗처럼 **사람이 한 일이 아닌** 수정의 origin. 되돌리기가 추적하지 않는다.
+ *
+ * 지금 화면을 열자마자 `Cmd+Z` 로 문서가 사라지지 않는 것은 사실 **순서**가
+ * 지켜 준다 — 씨앗이 `UndoManager` 보다 먼저 들어가서 되돌리기가 그 트랜잭션을
+ * 아예 못 본다. 그러니 이 origin 은 지금 하는 일이 없다.
+ *
+ * 그래도 두는 이유는 곧 할 일이 생기기 때문이다. 서버가 붙으면 **이미 살아
+ * 있는 되돌리기 옆에** 받아 온 문서를 얹게 되고, 그때는 origin 말고는 "이건
+ * 사람이 한 게 아니다" 를 말할 방법이 없다. 그 자리를 검사로 미리 묶어 두었다.
  */
-const KEEL_SEED = Symbol('keel-seed');
+export const KEEL_SEED = Symbol('keel-seed');
 
 export interface KeelDocument {
   readonly doc: Y.Doc;
@@ -659,6 +828,12 @@ export function createKeelDocument(
   /**
    * 둘을 **함께** 감싼다. 친 글자와 끈 노드가 한 역사여야 사람이 "방금 뭘
    * 되돌렸는지" 를 따라갈 수 있다.
+   *
+   * `captureTimeout` 은 **건드리지 않는다.** 기본값(500ms)이 짧은 사이의
+   * 수정을 한 걸음으로 묶어 주는데, 글자를 칠 때는 그게 맞다 — 0 으로 두면
+   * `Cmd+Z` 가 한 자씩 지워 편집기로 쓸 수 없게 된다. 걸음의 경계가 필요한
+   * 자리(캔버스 조작 하나가 끝나는 곳)에서는 시간을 줄이는 대신
+   * `undoManager.stopCapturing()` 을 부른다. `commands.ts` 가 그렇게 한다.
    */
   const undoManager = new Y.UndoManager([source, layout], {
     trackedOrigins: new Set<unknown>([KEEL_LOCAL, ...extraTrackedOrigins]),
@@ -680,12 +855,17 @@ export function createKeelDocument(
 - [ ] **Step 4: 검사를 돌려 통과하는 것을 본다**
 
 Run: `cd apps/web && npx vitest run test/keel-document.test.ts`
-Expected: PASS (8 tests)
+Expected: PASS (10 tests)
 
 - [ ] **Step 5: 검사가 실제로 무는지 확인한다**
 
-1. 씨앗의 origin 을 `KEEL_SEED` 대신 `KEEL_LOCAL` 로 바꾼다 → `씨앗은 되돌려지지 않는다` 가 져야 한다
+1. `trackedOrigins` 에 `KEEL_SEED` 를 더한다 → `되돌리기가 살아 있는 동안 넣은 것도 KEEL_SEED 면 안 되돌아간다` 가 져야 한다
+
+   (씨앗의 origin 만 `KEEL_LOCAL` 로 바꾸는 것은 **안 문다** — 씨앗이 `UndoManager`
+   보다 먼저 들어가 origin 과 무관하게 안 되돌아간다. 처음에 그렇게 적어 두었다가
+   구현자가 안 문다고 알려 와서 고쳤다.)
 2. `new Y.UndoManager([source, layout], …)` 를 `new Y.UndoManager(source, …)` 로 바꾼다 → 레이아웃 되돌리기 검사 둘이 져야 한다
+3. `captureTimeout: 0` 을 넣어 본다 → `빠르게 친 글자는 한 걸음으로 묶인다` 가 져야 한다 (글자가 한 자씩 되돌아간다)
 
 Expected: 각각 FAIL. 확인 후 되돌린다.
 
@@ -703,9 +883,19 @@ Y.Text('source') 가 문서이고 Y.Map('layout') 에는 사람이 옮긴 노드
 (UndoManager.js:216) 화면 쪽이 YSyncConfig 클래스를 넘겨 주면 이 파일은
 CodeMirror 을 몰라도 된다.
 
-씨앗은 일부러 추적하지 않는 origin 으로 넣는다. 되돌릴 수 있게 두면 화면을
-열자마자 Cmd+Z 한 번에 문서가 통째로 사라진다. 씨앗 origin 을 KEEL_LOCAL 로
-바꿔 검사가 지는 것을 확인했다.
+씨앗은 추적하지 않는 origin 으로 넣는다. 다만 지금 Cmd+Z 로 문서가 안 사라지는
+것은 사실 순서가 지켜 준다 — 씨앗이 UndoManager 보다 먼저 들어가 되돌리기가 그
+트랜잭션을 못 본다. origin 은 지금 하는 일이 없다.
+
+그래도 두는 이유는 서버가 붙으면 이미 살아 있는 되돌리기 옆에 받아 온 문서를
+얹게 되고, 그때는 origin 말고 "사람이 한 게 아니다" 를 말할 방법이 없기
+때문이다. 그 자리를 검사로 미리 묶었다 — trackedOrigins 에 KEEL_SEED 를 더해
+검사가 지는 것을 확인했다.
+
+captureTimeout 은 건드리지 않는다. 기본값이 짧은 사이의 수정을 한 걸음으로
+묶어 주는데 글자를 칠 때는 그게 맞다 — 0 으로 두면 Cmd+Z 가 한 자씩 지워
+편집기로 쓸 수 없게 된다. 넣어 보고 검사가 지는 것을 확인했다. 걸음의 경계는
+시간이 아니라 stopCapturing() 으로 긋는다.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
@@ -775,7 +965,12 @@ describe('이름 고치기', () => {
     document.destroy();
   });
 
-  /** 빈 트랜잭션은 되돌리기 역사에 빈 칸을 남긴다 */
+  /**
+   * 빈 트랜잭션은 되돌리기 역사에 빈 칸을 남긴다.
+   *
+   * **같은 이름으로 고치는 경우가 핵심이다.** `planSetNodeLabel` 은 그때 빈
+   * 배열이 아니라 같은 글자를 다시 쓰는 수정을 돌려주므로, 명령 쪽에서 걸러야 한다.
+   */
   it('바뀔 것이 없으면 트랜잭션을 안 연다', () => {
     const document = createKeelDocument(SOURCE);
 
@@ -836,15 +1031,46 @@ describe('지우기', () => {
     document.destroy();
   });
 
+  /**
+   * **중간 단언이 이 검사의 전부다.**
+   *
+   * `moveNode` 와 `removeNode` 는 각각 제 걸음이라(`beginStep`), `undo()` 한 번은
+   * `removeNode` 만 되돌린다. 그래서 "지운 뒤 자리가 없어졌다" 를 안 확인하면,
+   * `layout.delete` 를 빼 버려도 이 검사가 **공허하게 통과한다** — 자리가
+   * 되돌아온 게 아니라 애초에 건드려지지 않았을 뿐인데 같은 값이 나온다.
+   */
   it('되돌리면 텍스트와 자리가 함께 돌아온다', () => {
     const document = createKeelDocument(SOURCE);
     moveNode(document, 'api', { x: 100, y: 200 });
 
     removeNode(document, 'api');
+    expect(document.layout.get('api')).toBeUndefined();
+
     document.undoManager.undo();
 
     expect(document.source.toString()).toContain('service api');
     expect(document.layout.get('api')).toEqual({ x: 100, y: 200 });
+    document.destroy();
+  });
+});
+
+describe('되돌리기 걸음', () => {
+  /**
+   * 명령 하나가 한 걸음이어야 한다. 경계를 안 그으면 Yjs 가 짧은 사이의 수정을
+   * 묶어, 이름을 고치고 곧바로 노드를 끌었을 때 Cmd+Z 한 번에 둘 다 되돌아간다.
+   */
+  it('잇달아 한 명령 둘이 따로 되돌아간다', () => {
+    const document = createKeelDocument(SOURCE);
+
+    renameNode(document, 'api', '주문 API');
+    moveNode(document, 'api', { x: 10, y: 20 });
+
+    document.undoManager.undo();
+    expect(document.layout.get('api')).toBeUndefined();
+    expect(document.source.toString()).toContain('service api "주문 API"');
+
+    document.undoManager.undo();
+    expect(document.source.toString()).toBe(SOURCE);
     document.destroy();
   });
 });
@@ -897,9 +1123,35 @@ import { applyTextEdits } from './text-edits.js';
  * 칸을 남겨, Cmd+Z 를 눌렀는데 아무 일도 안 일어나게 만든다.
  */
 
+/**
+ * 바뀌는 것이 없는 수정은 버린다.
+ *
+ * `planSetNodeLabel` 은 **같은 라벨로 고쳐도 빈 배열을 안 준다** — 같은 글자를
+ * 다시 쓰는 수정을 준다(`planSetNodeKind` 는 `[]` 를 준다). 그대로 얹으면
+ * 되돌리기 역사에 빈 칸이 생기고, 남의 화면에는 아무것도 안 바뀐 갱신이 날아간다.
+ */
+function meaningful(source: string, edits: readonly TextEdit[]): TextEdit[] {
+  return edits.filter((edit) => source.slice(edit.from, edit.to) !== edit.insert);
+}
+
+/**
+ * 명령 하나는 **되돌리기 한 걸음**이다.
+ *
+ * Yjs 는 짧은 사이에 일어난 수정을 한 걸음으로 묶는다(기본 500ms). 글자를 칠
+ * 때는 그게 맞지만, 캔버스 조작은 한 번이 한 행동이다 — 이름을 고치고 곧바로
+ * 노드를 끌면 `Cmd+Z` 한 번에 둘 다 되돌아가 버린다. 그래서 명령을 얹기 전에
+ * 경계를 긋는다.
+ */
+function beginStep(document: KeelDocument): void {
+  document.undoManager.stopCapturing();
+}
+
 function editText(document: KeelDocument, plan: (doc: ParsedDocument) => TextEdit[]): void {
-  const edits = plan(parse(document.source.toString()));
+  const source = document.source.toString();
+  const edits = meaningful(source, plan(parse(source)));
   if (edits.length === 0) return;
+
+  beginStep(document);
   document.doc.transact(() => applyTextEdits(document.source, edits), KEEL_LOCAL);
 }
 
@@ -926,10 +1178,12 @@ export function setNodeKind(document: KeelDocument, id: string, kind: NodeKind):
  * 한 번에 글과 자리가 함께 돌아온다.
  */
 export function removeNode(document: KeelDocument, id: string): void {
-  const edits = planRemoveNode(parse(document.source.toString()), id);
+  const source = document.source.toString();
+  const edits = meaningful(source, planRemoveNode(parse(source), id));
   const hadPlace = document.layout.has(id);
   if (edits.length === 0 && !hadPlace) return;
 
+  beginStep(document);
   document.doc.transact(() => {
     applyTextEdits(document.source, edits);
     document.layout.delete(id);
@@ -943,6 +1197,7 @@ export function removeNode(document: KeelDocument, id: string): void {
  * 손대면 렌더러의 "중심이 레이아웃에 적힌 값과 정확히 같다" 계약이 깨진다.
  */
 export function moveNode(document: KeelDocument, id: string, at: Point): void {
+  beginStep(document);
   document.doc.transact(() => document.layout.set(id, at), KEEL_LOCAL);
 }
 ```
@@ -950,12 +1205,16 @@ export function moveNode(document: KeelDocument, id: string, at: Point): void {
 - [ ] **Step 4: 검사를 돌려 통과하는 것을 본다**
 
 Run: `cd apps/web && npx vitest run test/commands.test.ts`
-Expected: PASS (11 tests)
+Expected: PASS (12 tests)
 
 - [ ] **Step 5: 검사가 실제로 무는지 확인한다**
 
-1. `removeNode` 에서 `document.layout.delete(id)` 줄을 지운다 → 레이아웃 검사 둘이 져야 한다
-2. `editText` 의 `if (edits.length === 0) return;` 을 지운다 → `바뀔 것이 없으면 트랜잭션을 안 연다` 가 져야 한다
+1. `removeNode` 에서 `document.layout.delete(id)` 줄을 지운다 → 레이아웃 검사 **둘 다** 져야 한다
+
+   둘 다 지는지 꼭 세어 본다. `되돌리면 텍스트와 자리가 함께 돌아온다` 는
+   중간 단언이 없으면 그 변형에서도 공허하게 통과한다 — 검사가 하나뿐인 셈이 된다.
+2. `editText` 의 `meaningful(...)` 을 걷어 내고 `plan(...)` 을 그대로 쓴다 → `바뀔 것이 없으면 트랜잭션을 안 연다` 가 져야 한다 (같은 이름으로 고치는 줄에서 진다)
+3. `beginStep` 호출 셋을 지운다 → `잇달아 한 명령 둘이 따로 되돌아간다` 가 져야 한다
 
 Expected: 각각 FAIL. 확인 후 되돌린다.
 
@@ -975,6 +1234,11 @@ web: 캔버스 조작이 텍스트의 그 줄만 고친다
 
 바뀔 것이 없으면 트랜잭션을 아예 안 연다. 빈 트랜잭션은 되돌리기 역사에 빈
 칸을 남겨, Cmd+Z 를 눌렀는데 아무 일도 안 일어나게 만든다.
+
+명령 하나는 되돌리기 한 걸음이다. Yjs 는 짧은 사이의 수정을 한 걸음으로
+묶는데 글자를 칠 때는 그게 맞지만 캔버스 조작은 한 번이 한 행동이라, 얹기 전에
+stopCapturing() 으로 경계를 긋는다. 안 그으면 이름을 고치고 곧바로 노드를 끌
+때 Cmd+Z 한 번에 둘 다 되돌아간다. 호출을 지워 검사가 지는 것을 확인했다.
 
 옮기기는 받은 값을 그대로 적는다. 반올림은 끄는 쪽의 일이고, 여기서 손대면
 렌더러의 "중심이 레이아웃에 적힌 값과 정확히 같다" 계약이 깨진다.
@@ -1114,7 +1378,8 @@ export function yMapReader(layout: Y.Map<Point>): LayoutReader {
  * 끌고 있는 노드에만 다른 자리를 씌운다.
  *
  * 덧그리는 유령 없이 장면이 맞아떨어지고, 그룹 테두리가 자손에서 유도되므로
- * **노드를 그룹 밖으로 끌면 테두리가 실시간으로 따라 줄어든다.**
+ * **노드를 끌면 그룹 테두리가 실시간으로 따라 움직인다** — 자손을 감싸는
+상자라, 멀어지면 늘고 가까워지면 준다.
  *
  * 끌고 있지 않으면 받은 것을 그대로 돌려준다 — 껍데기를 하나 더 만들지 않는다.
  */
@@ -1159,19 +1424,33 @@ EOF
 
 **Files:**
 - Create: `apps/web/test/concurrent.test.ts`
+- Modify: `apps/web/src/document/text-edits.ts` (머리 주석의 틀린 이유만)
+- Modify: `packages/dsl/src/edits.ts` (머리 주석의 틀린 이유만)
 
 **Interfaces:**
 - Consumes: Task 3 의 `createKeelDocument`, Task 4 의 `renameNode`·`moveNode`·`removeNode`
 
-이 태스크는 **검사만** 더한다. 새 코드는 없다. README 가 "통째로 다시 쓰면 CRDT
-에서 같은 순간 남이 친 글자가 병합이 아니라 소멸이 된다" 고 주장하는데, 서버가
-없는 지금도 `Y.Doc` 둘을 손으로 붙이면 그 주장을 검사할 수 있다.
+이 태스크는 **검사만** 더한다. 새 코드는 없다. 서버가 없어도 `Y.Doc` 둘을 손으로
+붙이면 서버가 하는 일이 그대로 재현되므로, 이 저장소가 구간 수정을 고집하는
+이유를 지금 증명할 수 있다.
+
+**다만 그 이유는 처음에 적어 둔 것과 다르다.** 재 보니 Yjs 에서 통째로 다시 써도
+상대의 삽입이 *소멸하지는* 않는다 — Yjs 는 자리가 아니라 항목 단위로 지우므로,
+내가 못 본 상대의 삽입은 내 지우기에 안 걸린다. 실제로 일어나는 일은 더 나쁘다:
+**양쪽이 각자 쓴 전문이 나란히 살아남아 문서가 둘로 불어난다.** 이음매에서 줄이
+뭉개지고(`web -> apiservice web "스토어프론트"`), 같은 이름의 노드가 두 벌씩
+생기고, 파서가 진단을 쏟는다.
+
+그래서 검사도 "글자가 남아 있나" 가 아니라 **"문서가 여전히 문서인가"** 를 본다 —
+합쳐진 결과를 다시 파싱해 진단이 0 이고 노드 이름이 안 겹치는지 확인한다.
+글자만 세면 통째로 쓰기에서도 통과해 버려서 아무것도 못 묶는다.
 
 - [ ] **Step 1: 검사를 쓴다**
 
 `apps/web/test/concurrent.test.ts`:
 
 ```ts
+import { parse } from '@keel/dsl';
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { moveNode, removeNode, renameNode } from '../src/document/commands.js';
@@ -1196,11 +1475,14 @@ function pair(source: string): [KeelDocument, KeelDocument] {
 
 describe('같은 문서를 둘이 고친다', () => {
   /**
-   * 이 저장소의 핵심 주장이다. 캔버스가 문서를 통째로 다시 썼다면 — "전부
-   * 지우고 전부 넣기" — 상대의 삽입이 지우기 구간 안에 있어 병합이 아니라
-   * 소멸이 됐을 것이다. 구간 수정이라서 둘 다 산다.
+   * 이 저장소의 핵심 주장이다.
+   *
+   * **글자가 남아 있는지만 보면 안 된다.** 통째로 다시 써도 양쪽 글자는 남는다 —
+   * 양쪽 전문이 나란히 살아남기 때문이다. 그래서 합쳐진 결과를 **다시 파싱해**
+   * 문서가 여전히 문서인지 본다. 통째로 쓰면 이음매에서 줄이 뭉개지고 노드가
+   * 두 벌씩 생겨 여기서 진단이 쏟아진다.
    */
-  it('서로 다른 노드의 이름을 동시에 고치면 둘 다 산다', () => {
+  it('서로 다른 노드의 이름을 동시에 고치면 문서가 온전하다', () => {
     const [a, b] = pair(SOURCE);
 
     renameNode(a, 'api', '주문 API');
@@ -1208,8 +1490,17 @@ describe('같은 문서를 둘이 고친다', () => {
     sync(a, b);
 
     for (const document of [a, b]) {
-      expect(document.source.toString()).toContain('service api "주문 API"');
-      expect(document.source.toString()).toContain('db orders "주문 DB"');
+      const merged = document.source.toString();
+      expect(merged).toContain('service api "주문 API"');
+      expect(merged).toContain('db orders "주문 DB"');
+
+      // 문서가 불어나지도, 뭉개지지도 않았다
+      const parsed = parse(merged);
+      expect(parsed.diagnostics).toHaveLength(0);
+      expect(merged.split('\n')).toHaveLength(SOURCE.split('\n').length);
+
+      const ids = parsed.nodes.map((n) => n.id);
+      expect(new Set(ids).size).toBe(ids.length);
     }
 
     a.destroy();
@@ -1225,8 +1516,10 @@ describe('같은 문서를 둘이 고친다', () => {
     sync(a, b);
 
     for (const document of [a, b]) {
-      expect(document.source.toString()).toContain('service api "주문 API"');
-      expect(document.source.toString()).toContain('queue events');
+      const merged = document.source.toString();
+      expect(merged).toContain('service api "주문 API"');
+      expect(merged).toContain('queue events');
+      expect(parse(merged).diagnostics).toHaveLength(0);
     }
 
     a.destroy();
@@ -1304,25 +1597,65 @@ function editText(document: KeelDocument, plan: (doc: ParsedDocument) => TextEdi
 ```
 
 Run: `cd apps/web && npx vitest run test/concurrent.test.ts`
-Expected: FAIL — `서로 다른 노드의 이름을 동시에 고치면 둘 다 산다` 가 진다. 한쪽의
-고침이 상대의 지우기 구간에 먹혀 사라진다. **확인 후 되돌린다.**
+Expected: FAIL — `서로 다른 노드의 이름을 동시에 고치면 문서가 온전하다` 가 진다.
+합쳐진 문서가 **둘로 불어나** 진단이 쏟아지고, 줄 수가 늘고, 같은 이름의 노드가
+두 벌 생긴다. 실제로 이런 모양이 된다:
 
-이것이 `edits.ts` 가 있는 이유를 눈으로 보는 자리다.
+```
+service web "스토어프론트"
+service api
+db orders "주문 DB"
+web -> apiservice web "스토어프론트"      <- 이음매에서 줄이 뭉개졌다
+service api "주문 API"
+db orders
+web -> api
+```
+
+**확인 후 되돌린다.** `commands.ts` 가 손대기 전과 한 글자도 다르지 않은지
+확인한다.
+
+이것이 `edits.ts` 가 있는 이유를 눈으로 보는 자리다. 그리고 **글자만 세는 검사로는
+이것을 못 잡는다** — 양쪽 글자가 다 남아 있기 때문이다. 다시 파싱해 보는 단언이
+있어야 문서가 망가진 것이 드러난다.
+
+- [ ] **Step 3.5: 같은 거짓 이유가 적힌 주석 둘을 고친다**
+
+방금 잰 것이 두 파일의 머리 주석을 거짓으로 만든다. 이 저장소의 주석은 진짜
+이유를 적으므로 함께 고친다. **글자만 고친다 - 코드는 건드리지 않는다.**
+
+고칠 곳은 `apps/web/src/document/text-edits.ts` 와 `packages/dsl/src/edits.ts` 의
+머리 주석에서 "같은 순간 다른 사람이 친 글자가 지워진다 / 병합이 아니라 소멸이
+된다" 고 말하는 대목이다.
+
+실제로 일어나는 일로 바꾼다 - 소멸이 아니라 **문서가 둘로 불어난다.** Yjs 는
+자리가 아니라 항목 단위로 지우므로 내가 못 본 상대의 삽입은 내 지우기에 안
+걸린다. 그래서 양쪽 전문이 나란히 남아 이음매에서 줄이 뭉개지고 같은 이름의
+노드가 두 벌 생긴다. 잰 숫자(구간 수정 4줄·진단 0 / 통째로 쓰기 7줄·진단 4)를
+근거로 적어 둔다.
+
+`packages/dsl` 은 이 앱 밖이지만 주석 한 대목이라 같이 고치는 것이 맞다 -
+틀린 설명을 남겨 두면 다음 사람이 그것을 믿는다.
 
 - [ ] **Step 4: 커밋**
 
 ```bash
-git add apps/web/test/concurrent.test.ts
+git add apps/web/test/concurrent.test.ts apps/web/src/document/text-edits.ts packages/dsl/src/edits.ts
 git commit -F - <<'EOF'
-web: 같은 문서를 둘이 고쳐도 둘 다 사는 것을 검사한다
+web: 같은 문서를 둘이 고쳐도 문서가 온전한 것을 검사한다
 
-README 의 핵심 주장 — 통째로 다시 쓰면 CRDT 에서 같은 순간 남이 친 글자가
-병합이 아니라 소멸이 된다 — 을 서버 없이 검사한다. Y.Doc 둘을 손으로 붙이면
-서버가 하는 일이 그대로 재현된다.
+서버가 없어도 Y.Doc 둘을 손으로 붙이면 서버가 하는 일이 그대로 재현된다.
+이 저장소가 구간 수정을 고집하는 이유를 지금 증명한다.
 
-commands 의 editText 를 통째로 다시 쓰기로 바꿔 검사가 지는 것을 확인했다.
-한쪽의 고침이 상대의 지우기 구간에 먹혀 사라진다. packages/dsl 의 구간 수정
-설계가 왜 있는지를 눈으로 보는 자리다.
+다만 그 이유는 지금까지 적어 둔 것과 다르다. 재 보니 Yjs 에서는 통째로 다시
+써도 상대의 삽입이 소멸하지 않는다 - Yjs 는 자리가 아니라 항목 단위로 지우므로
+내가 못 본 상대의 삽입은 내 지우기에 안 걸린다.
+
+실제로 일어나는 일은 더 나쁘다. 양쪽이 각자 쓴 전문이 나란히 살아남아 문서가
+둘로 불어난다. 이음매에서 줄이 뭉개지고, 같은 이름의 노드가 두 벌씩 생기고,
+파서가 진단을 쏟는다. 구간 수정일 때는 4줄 진단 0, 통째로 쓰기는 7줄 진단 4 였다.
+
+그래서 검사가 글자를 세지 않고 합쳐진 문서를 다시 파싱한다. 글자만 세면 통째로
+쓰기에서도 통과해 아무것도 못 묶는다 - 양쪽 글자가 다 남아 있기 때문이다.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
@@ -1639,16 +1972,52 @@ describe('팬', () => {
     expect(moved.intent.viewport.y).toBe(-30);
   });
 
-  /** 팬은 누른 자리에서 재야 한다. 직전 자리에서 재면 반올림 오차가 쌓인다 */
-  it('팬은 누른 자리에서 잰다', () => {
+  /**
+   * 팬은 누른 자리에서 재야 한다. 직전 자리에서 재면 반올림 오차가 쌓인다.
+   *
+   * **세 번 움직이는 것이 중요하다.** 첫 번째 움직임은 아직 `pressed` 라
+   * 문턱을 넘는 전환 그 자체이고, `panning` 갈래는 두 번째부터 돈다. 두 번만
+   * 움직이면 그 갈래를 딱 한 번 지나므로 "자리를 갱신하며 쌓이는" 버그가
+   * 드러날 자리가 없다 — 세 번째에서야 어긋난다.
+   */
+  it('팬은 여러 번 움직여도 누른 자리에서 잰다', () => {
     const g = onPointerDown(IDLE, at(0, 0), undefined, DEFAULT_VIEWPORT);
-    const first = onPointerMove(g, at(10, 0));
-    const second = onPointerMove(first.gesture, at(30, 0));
 
+    const first = onPointerMove(g, at(10, 0));
+    if (first.intent.kind !== 'pan') throw new Error('팬이 아니다');
+    expect(first.intent.viewport.x).toBe(-10);
+
+    const second = onPointerMove(first.gesture, at(30, 0));
     if (second.intent.kind !== 'pan') throw new Error('팬이 아니다');
     expect(second.intent.viewport.x).toBe(-30);
+
+    const third = onPointerMove(second.gesture, at(45, 0));
+    if (third.intent.kind !== 'pan') throw new Error('팬이 아니다');
+    expect(third.intent.viewport.x).toBe(-45);
   });
 
+  /**
+   * **팬을 하다 손을 떼는 것은 흔한 조작인데 뜻이 없다.** 화면을 밀어 놓은
+   * 것으로 끝이고, 고르지도 문서를 고치지도 않는다. 여기서 엉뚱한 뜻이 새면
+   * 배경을 밀었을 뿐인데 선택이 풀리거나 무언가가 문서에 적힌다.
+   */
+  it('팬 하다 손을 떼면 아무 뜻도 안 남는다', () => {
+    const down = onPointerDown(IDLE, at(0, 0), undefined, DEFAULT_VIEWPORT);
+    const moved = onPointerMove(down, at(50, 30));
+    expect(moved.gesture.kind).toBe('panning');
+
+    const up = onPointerUp(moved.gesture, at(50, 30));
+    expect(up.gesture).toEqual(IDLE);
+    expect(up.intent).toEqual({ kind: 'none' });
+  });
+});
+
+describe('누르고 그냥 떼기', () => {
+  /**
+   * 이 검사는 `panning` 이 아니라 `pressed` 를 지난다 — 움직인 적이 없기
+   * 때문이다. "팬" 묶음에 두었더니 팬 쪽이 다 덮인 것처럼 보여, 정작 팬을
+   * 하다 떼는 경우가 빠진 것을 오래 못 봤다. 그래서 따로 묶는다.
+   */
   it('배경을 눌렀다 그냥 떼면 선택을 푼다', () => {
     const g = onPointerDown(IDLE, at(0, 0), undefined, DEFAULT_VIEWPORT);
     const up = onPointerUp(g, at(0, 0));
@@ -1841,7 +2210,13 @@ Expected: PASS (10 tests)
 
 1. 문턱 견주기를 `distance(...) < 0` 으로 바꿔 늘 끌기가 되게 한다 → `문턱을 안 넘고 떼면…` 이 져야 한다
 2. `dragMove` 에서 `grabOffset` 더하기를 빼고 `e.world` 를 그대로 쓴다 → `잡은 자리를 지킨다` 가 져야 한다
-3. `pan` 의 기준을 `gesture.from` 대신 매번 갱신되는 값으로 바꾼다 → `팬은 누른 자리에서 잰다` 가 져야 한다
+3. `onPointerUp` 의 `panning` 갈래가 `NOTHING` 대신 `{ kind: 'select', hit: undefined }` 를 돌려주게 한다 → `팬 하다 손을 떼면 아무 뜻도 안 남는다` 가 져야 한다
+
+4. `pan` 의 기준을 매번 갱신되는 값으로 바꾼다 → `팬은 여러 번 움직여도 누른 자리에서 잰다` 가 져야 한다
+
+   **두 자리를 따로 해 본다.** (a) `pressed → panning` 전환에서 `from: gesture.screen`
+   을 `from: e.screen` 으로 바꾸기 (b) `panning` 갈래가 매 움직임마다 새 `from` 을
+   담은 상태를 돌려주게 하기. 둘 다 져야 한다 — (b)는 세 번째 움직임에서 어긋난다.
 
 Expected: 각각 FAIL. 확인 후 되돌린다.
 
@@ -2020,6 +2395,7 @@ EOF
 **Files:**
 - Create: `apps/web/src/hooks/use-keel-document.ts`, `apps/web/src/hooks/use-canvas.ts`
 - Create: `apps/web/src/components/canvas-pane.tsx`
+- Create: `apps/web/src/document/seed.ts`
 - Modify: `apps/web/app/page.tsx` (전체 교체)
 
 **Interfaces:**
@@ -2086,6 +2462,7 @@ import {
 } from '@keel/renderer';
 import type { Ctx2D, Hit, Point, Scene, SpatialIndex, Viewport } from '@keel/renderer';
 import { useCallback, useEffect, useRef } from 'react';
+import type { RefObject } from 'react';
 
 /**
  * 캔버스를 쥔다 — 엘리먼트, 크기, RAF 루프, 뷰포트.
@@ -2108,7 +2485,7 @@ export interface UseCanvas {
   readonly canvasRef: (element: HTMLCanvasElement | null) => void;
   /** 다음 프레임에 한 번만 다시 그린다 */
   readonly invalidate: () => void;
-  readonly viewportRef: React.RefObject<Viewport>;
+  readonly viewportRef: RefObject<Viewport>;
   /** 화면 좌표를 월드 좌표로 */
   readonly toWorld: (screen: Point) => Point;
   /** 캔버스 안에서의 화면 좌표 */
@@ -2187,9 +2564,21 @@ export function useCanvas(options: UseCanvasOptions): UseCanvas {
     return () => observer.disconnect();
   }, [resize]);
 
+  /**
+   * 취소한 뒤 **반드시 `null` 로 되돌린다.**
+   *
+   * 안 되돌리면 `frame.current` 가 이미 취소된 id 를 계속 들고 있고,
+   * `invalidate()` 의 문지기가 그것을 "이미 예약됨" 으로 읽어 다시 그리기를
+   * 영원히 막는다. React 의 Strict Mode 는 개발 중에 마운트→정리→재마운트를
+   * 한 번 흉내 내므로, **첫 그리기 뒤 캔버스가 그대로 얼어붙는다.**
+   * 띄워 보기 전에는 안 보이는 부류다 — 타입도 린트도 검사도 다 통과한다.
+   */
   useEffect(
     () => () => {
-      if (frame.current !== null) window.cancelAnimationFrame(frame.current);
+      if (frame.current !== null) {
+        window.cancelAnimationFrame(frame.current);
+        frame.current = null;
+      }
     },
     [],
   );
@@ -2286,6 +2675,19 @@ export function CanvasPane({ document }: { document: KeelDocument }) {
     invalidate();
   }, [source, invalidate]);
 
+  /**
+   * 고른 것이 바뀌어도 다시 그린다.
+   *
+   * `selection` 은 부모가 쥔 React state 라서 `onSelect` 를 부르는 것만으로는
+   * 캔버스가 다시 그려지지 않는다 — `useCanvas` 안의 `optionsRef` 갱신은 커밋
+   * 뒤 effect 이고, 아무도 `invalidate()` 를 안 부른다. 이 효과가 없으면
+   * **노드를 눌러도 파란 테두리가 안 생긴다.** 다음 팬·줌이나 끌기가 화면을
+   * 건드릴 때에야 뒤늦게 나타난다.
+   */
+  useEffect(() => {
+    invalidate();
+  }, [selection, invalidate]);
+
   // 레이아웃이 바뀌어도 다시 그린다 (남이 옮겼거나 되돌렸을 때)
   useEffect(() => {
     const onChange = () => invalidate();
@@ -2346,7 +2748,23 @@ import { SEED } from '../src/document/seed.js';
 
 export default function EditorPage() {
   const document = useMemo(() => createKeelDocument(SEED), []);
-  useEffect(() => () => document.destroy(), [document]);
+  /**
+   * **문서를 정리하지 않는다.**
+   *
+   * `useEffect(() => () => document.destroy(), [])` 로 두면 안 된다. React 의
+   * Strict Mode 는 개발 중 마운트→정리→재마운트를 한 번 흉내 내는데, 문서는
+   * `useMemo(..., [])` 로 한 번만 만들어져 재마운트 때 다시 안 만들어진다.
+   * 그래서 유령 정리가 부른 `destroy()` 가 그대로 남는다.
+   *
+   * 겉으로는 멀쩡해 보인다 — 글자도 고쳐지고 캔버스도 그려진다. 죽는 것은
+   * 되돌리기뿐이다. 재 봤더니 `destroy()` 뒤에도 편집은 되는데 `canUndo()` 가
+   * `false` 이고 `Cmd+Z` 가 아무 일도 안 한다. `UndoManager.destroy()` 가
+   * `afterTransaction` 구독을 떼어 내고 아무도 다시 붙이지 않기 때문이다.
+   *
+   * 문서는 이 화면과 수명이 같고 화면은 한 장뿐이라, 안 지워도 잃는 것이 없다.
+   * 나중에 **화면을 떠나지 않은 채 편집기만 내리는 길**이 생기면 그때는
+   * 문서를 효과 안에서 만들어 만듦과 지움을 짝지어야 한다.
+   */
 
   return (
     <main style={{ height: '100%' }}>
@@ -2396,8 +2814,14 @@ Expected: 전부 통과
 - [ ] **Step 6: 눈으로 확인한다**
 
 Run: `pnpm --filter @keel/web dev` 를 띄우고 `http://localhost:3000` 을 연다
+
+**`build` 가 아니라 `dev` 로 봐야 한다.** React 의 Strict Mode 는 개발 중에만
+마운트→정리→재마운트를 흉내 내는데, 정리에서 남긴 찌꺼기로 화면이 얼어붙는
+부류의 버그는 그때만 드러난다. 타입·린트·검사·빌드를 전부 통과하고도 화면이
+안 움직일 수 있다.
+
 Expected:
-- 씨앗 문서의 노드 여덟 개와 `결제` 그룹 테두리가 보인다
+- 씨앗 문서의 노드 일곱 개와 `결제` 그룹 테두리가 보인다
 - 종류마다 생김새가 다르다 (`external toss` 는 점선, `db orders` 는 원통)
 - 휠로 화면이 밀리고 `Ctrl`+휠(또는 트랙패드 핀치)로 커서 자리를 붙든 채 확대된다
 - 창 크기를 바꿔도 흐려지지 않는다
@@ -2602,7 +3026,23 @@ function idOf(hit: Hit | undefined): string | undefined {
 
 export default function EditorPage() {
   const document = useMemo(() => createKeelDocument(SEED), []);
-  useEffect(() => () => document.destroy(), [document]);
+  /**
+   * **문서를 정리하지 않는다.**
+   *
+   * `useEffect(() => () => document.destroy(), [])` 로 두면 안 된다. React 의
+   * Strict Mode 는 개발 중 마운트→정리→재마운트를 한 번 흉내 내는데, 문서는
+   * `useMemo(..., [])` 로 한 번만 만들어져 재마운트 때 다시 안 만들어진다.
+   * 그래서 유령 정리가 부른 `destroy()` 가 그대로 남는다.
+   *
+   * 겉으로는 멀쩡해 보인다 — 글자도 고쳐지고 캔버스도 그려진다. 죽는 것은
+   * 되돌리기뿐이다. 재 봤더니 `destroy()` 뒤에도 편집은 되는데 `canUndo()` 가
+   * `false` 이고 `Cmd+Z` 가 아무 일도 안 한다. `UndoManager.destroy()` 가
+   * `afterTransaction` 구독을 떼어 내고 아무도 다시 붙이지 않기 때문이다.
+   *
+   * 문서는 이 화면과 수명이 같고 화면은 한 장뿐이라, 안 지워도 잃는 것이 없다.
+   * 나중에 **화면을 떠나지 않은 채 편집기만 내리는 길**이 생기면 그때는
+   * 문서를 효과 안에서 만들어 만듦과 지움을 짝지어야 한다.
+   */
 
   const [selectedHit, setSelectedHit] = useState<Hit | undefined>(undefined);
   const selection = useMemo(() => {
@@ -2630,7 +3070,7 @@ Expected: 전부 통과
 Run: `pnpm --filter @keel/web dev`
 Expected:
 - 노드 위에서 커서가 `grab` 이 되고, 노드를 누르면 파란 테두리가 생긴다
-- 노드를 끌면 따라오고, **`결제` 그룹의 노드를 밖으로 끌면 그룹 테두리가 따라 줄어든다**
+- 노드를 끌면 따라오고, **`결제` 그룹의 노드를 끌면 그룹 테두리가 따라 움직인다** (자손을 감싸는 상자라 멀어지면 늘고 가까워지면 준다)
 - 배경을 끌면 화면이 밀린다 (노드가 안 움직인다)
 - 노드를 살짝 눌렀다 떼면 움직이지 않고 고르기만 된다
 - 배경을 눌렀다 떼면 선택이 풀린다
@@ -2648,7 +3088,7 @@ Y.Map 에 쓴다. 중간 좌표까지 CRDT 에 넣으면 실시간 판에서 업
 awareness, 놓은 것은 Y.Map" 이 된다.
 
 끌기는 LayoutReader 덧씌우기로 푼다. 덧그리는 유령이 없고, 그룹 테두리가
-자손에서 유도되므로 노드를 그룹 밖으로 끌면 테두리가 실시간으로 따라 줄어든다.
+자손에서 유도되므로 노드를 끌면 그룹 테두리가 자손을 감싸며 실시간으로 따라 움직인다.
 
 가리킨 것은 ref 도 state 도 아니고 커서 모양으로만 나타난다. state 로 두면
 마우스를 움직이는 내내 재조정이 돈다.
@@ -2683,6 +3123,7 @@ import type { Diagnostic as CmDiagnostic } from '@codemirror/lint';
 import { EditorState } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { useEffect, useRef } from 'react';
+import type { RefObject } from 'react';
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
 import { parseSource } from '../document/derive.js';
 import type { KeelDocument } from '../document/keel-document.js';
@@ -2703,7 +3144,7 @@ export function EditorPane({
   viewRef,
 }: {
   readonly document: KeelDocument;
-  readonly viewRef: React.RefObject<EditorView | null>;
+  readonly viewRef: RefObject<EditorView | null>;
 }) {
   const host = useRef<HTMLDivElement | null>(null);
 
@@ -2712,8 +3153,13 @@ export function EditorPane({
     if (parent === null) return;
 
     /**
-     * 진단은 **이미 파싱한 것을 그대로 넘긴다.** 린터 안에서 다시 파싱하면
-     * 글자를 칠 때마다 같은 일을 두 번 한다.
+     * 린터는 **제 안에서 다시 파싱한다.**
+     *
+     * 화면 쪽이 이미 파싱해 두었으니 그것을 넘기고 싶지만, CodeMirror 의
+     * `linter()` 는 제 상태만 보고 스스로 답하는 콜백이라 넘길 통로가 없다.
+     * 통로를 내려면 컴포넌트 경계를 바꿔야 하는데, 파서가 회복형이라 한 번 더
+     * 도는 값이 싸서 그 값을 치를 이유가 없다. 지금은 두 번 돈다고 적어 둔다 —
+     * 안 그러면 다음 사람이 "넘겨 받는다" 는 주석을 믿고 엉뚱한 곳을 고친다.
      */
     const keelLinter = linter((view): CmDiagnostic[] => {
       const { document: parsed } = parseSource(view.state.doc.toString());
@@ -2729,6 +3175,14 @@ export function EditorPane({
     const view = new EditorView({
       parent,
       state: EditorState.create({
+        /**
+         * **처음 내용을 직접 넣어야 한다.**
+         *
+         * `yCollab` 의 동기화 플러그인은 `Y.Text` 의 **앞으로의 변화**만 지켜본다 —
+         * 이미 들어 있는 글자는 안 가져온다. 이 줄이 없으면 씨앗 문서가 있는데도
+         * 편집기가 빈 채로 뜬다. 타입·린트·검사·빌드는 전부 통과한다.
+         */
+        doc: keelDocument.source.toString(),
         extensions: [
           lineNumbers(),
           lintGutter(),
@@ -2846,12 +3300,37 @@ function idOf(hit: Hit | undefined): string | undefined {
 
 export default function EditorPage() {
   /**
-   * `YSyncConfig` 를 넘기는 것이 핵심이다. CodeMirror 의 로컬 편집은 그 클래스의
+   * `YSyncConfig` 를 함께 넘긴다. CodeMirror 의 로컬 편집은 그 클래스의
    * 인스턴스를 origin 으로 쓰고, Yjs 는 origin 을 생성자로도 견주므로 클래스만
-   * 넣어 두면 인스턴스를 손에 안 쥐어도 되돌리기에 걸린다.
+   * 넣어 두면 인스턴스를 손에 안 쥐어도 걸린다.
+   *
+   * **다만 지금은 이것이 없어도 돈다.** `y-codemirror.next` 0.3.6 의
+   * `yUndoManager` 플러그인이 붙을 때 제가 쓰는 인스턴스를
+   * `undoManager.addTrackedOrigin(...)` 으로 직접 등록한다
+   * (`src/y-undomanager.js:98`). 빼 보고 확인했다 — 타자 되돌리기는 그대로 된다.
+   *
+   * 그래도 두는 이유는 그 등록이 **저 라이브러리의 사정**이기 때문이다. 판이
+   * 바뀌거나 플러그인이 붙기 전에 생긴 편집이 있으면 기댈 곳이 없어진다.
+   * 생성자 매칭 자체는 `keel-document` 의 검사가 따로 묶고 있다.
    */
   const document = useMemo(() => createKeelDocument(SEED, [YSyncConfig]), []);
-  useEffect(() => () => document.destroy(), [document]);
+  /**
+   * **문서를 정리하지 않는다.**
+   *
+   * `useEffect(() => () => document.destroy(), [])` 로 두면 안 된다. React 의
+   * Strict Mode 는 개발 중 마운트→정리→재마운트를 한 번 흉내 내는데, 문서는
+   * `useMemo(..., [])` 로 한 번만 만들어져 재마운트 때 다시 안 만들어진다.
+   * 그래서 유령 정리가 부른 `destroy()` 가 그대로 남는다.
+   *
+   * 겉으로는 멀쩡해 보인다 — 글자도 고쳐지고 캔버스도 그려진다. 죽는 것은
+   * 되돌리기뿐이다. 재 봤더니 `destroy()` 뒤에도 편집은 되는데 `canUndo()` 가
+   * `false` 이고 `Cmd+Z` 가 아무 일도 안 한다. `UndoManager.destroy()` 가
+   * `afterTransaction` 구독을 떼어 내고 아무도 다시 붙이지 않기 때문이다.
+   *
+   * 문서는 이 화면과 수명이 같고 화면은 한 장뿐이라, 안 지워도 잃는 것이 없다.
+   * 나중에 **화면을 떠나지 않은 채 편집기만 내리는 길**이 생기면 그때는
+   * 문서를 효과 안에서 만들어 만듦과 지움을 짝지어야 한다.
+   */
 
   const source = useKeelDocument(document);
   const { document: parsed } = useMemo(() => parseSource(source), [source]);
@@ -2906,12 +3385,18 @@ Expected:
 - 치는 도중 화면이 비지 않는다 (파서가 회복한다)
 - **캔버스에서 노드를 끌고 `Cmd+Z` 를 누르면 자리가 돌아오고, 글자를 치고 `Cmd+Z` 를 누르면 글자가 돌아온다** — 한 역사다
 
-- [ ] **Step 6: 되돌리기 배선이 실제로 도는지 확인한다**
+- [ ] **Step 6: 하나짜리 역사가 실제로 도는지 확인한다**
 
-`page.tsx` 의 `createKeelDocument(SEED, [YSyncConfig])` 에서 `[YSyncConfig]` 를 빼고
-화면에서 글자를 친 뒤 `Cmd+Z` 를 눌러 본다.
+`yCollab(source, null, { undoManager })` 의 세 번째 인자를
+`{ undoManager: false }` 로 바꾼다 — `y-codemirror.next` 가 되돌리기 플러그인을
+아예 안 붙이게 된다.
 
-Expected: 글자가 안 돌아온다(끌기만 돌아온다). 확인 후 되돌린다.
+화면에서 노드를 하나 끌고, 글자를 조금 치고, `Cmd+Z` 를 눌러 본다.
+
+Expected: **글자는 안 돌아오고 끌기만 돌아온다.** 확인 후 되돌린다.
+
+(`[YSyncConfig]` 를 빼는 것으로는 **안 문다.** 그 판의 `yUndoManager` 플러그인이
+붙을 때 제 인스턴스를 스스로 등록하기 때문이다 — 확인했고 주석에 적어 두었다.)
 
 - [ ] **Step 7: 커밋**
 
@@ -2924,12 +3409,21 @@ y-codemirror.next 가 Y.Text 와 편집기를 잇는다. awareness 는 아직 �
 null 을 넘긴다 — 그 인자는 if (awareness) 로 감싸여 있어 원격 커서 플러그인만
 빠진다.
 
-되돌리기는 문서가 들고 있는 하나를 그대로 쓰고, page 가 YSyncConfig 클래스를
-origin 으로 넘긴다. Yjs 가 origin 을 생성자로도 견주므로 인스턴스를 손에 안
-쥐어도 걸린다. 그 인자를 빼고 Cmd+Z 가 글자를 못 되돌리는 것을 확인했다.
+처음 내용을 EditorState 에 직접 넣는다. yCollab 의 동기화 플러그인은 Y.Text 의
+앞으로의 변화만 지켜보고 이미 들어 있는 글자는 안 가져오므로, 이 줄이 없으면
+씨앗 문서가 있는데도 편집기가 빈 채로 뜬다. 타입·린트·검사·빌드는 다 통과한다.
 
-진단은 이미 파싱한 것을 그대로 넘긴다. 린터 안에서 다시 파싱하면 글자를 칠
-때마다 같은 일을 두 번 한다.
+되돌리기는 문서가 들고 있는 하나를 그대로 쓴다. CodeMirror 의 history() 는
+일부러 안 넣는다 — 넣으면 역사가 둘로 갈려 무엇을 되돌렸는지 알 수 없게 된다.
+undoManager: false 로 바꿔 글자만 안 돌아오는 것을 확인했다.
+
+page 가 YSyncConfig 클래스도 함께 넘기지만, 재 보니 지금은 그것이 없어도 돈다 —
+y-codemirror.next 0.3.6 의 플러그인이 제 인스턴스를 스스로 등록한다. 그래도
+두는 이유와 함께 주석에 적었다. 저쪽 사정에 기대는 것이기 때문이다.
+
+린터는 제 안에서 다시 파싱한다. CodeMirror 의 linter() 가 제 상태만 보고
+스스로 답하는 콜백이라 넘길 통로가 없고, 파서가 회복형이라 한 번 더 도는 값이
+싸다. "넘겨 받는다" 고 적어 두면 다음 사람이 엉뚱한 곳을 고치므로 사실대로 적었다.
 
 목록을 따로 둔 것은 밑줄만으로는 화면 밖의 잘못을 못 보기 때문이다. "선언 없이
 만들어진 노드" 같은 조용한 경고가 여기서 눈에 들어온다 — 오타가 새 노드가 되는
@@ -3139,12 +3633,37 @@ function idOf(hit: Hit | undefined): string | undefined {
 
 export default function EditorPage() {
   /**
-   * `YSyncConfig` 를 넘기는 것이 핵심이다. CodeMirror 의 로컬 편집은 그 클래스의
+   * `YSyncConfig` 를 함께 넘긴다. CodeMirror 의 로컬 편집은 그 클래스의
    * 인스턴스를 origin 으로 쓰고, Yjs 는 origin 을 생성자로도 견주므로 클래스만
-   * 넣어 두면 인스턴스를 손에 안 쥐어도 되돌리기에 걸린다.
+   * 넣어 두면 인스턴스를 손에 안 쥐어도 걸린다.
+   *
+   * **다만 지금은 이것이 없어도 돈다.** `y-codemirror.next` 0.3.6 의
+   * `yUndoManager` 플러그인이 붙을 때 제가 쓰는 인스턴스를
+   * `undoManager.addTrackedOrigin(...)` 으로 직접 등록한다
+   * (`src/y-undomanager.js:98`). 빼 보고 확인했다 — 타자 되돌리기는 그대로 된다.
+   *
+   * 그래도 두는 이유는 그 등록이 **저 라이브러리의 사정**이기 때문이다. 판이
+   * 바뀌거나 플러그인이 붙기 전에 생긴 편집이 있으면 기댈 곳이 없어진다.
+   * 생성자 매칭 자체는 `keel-document` 의 검사가 따로 묶고 있다.
    */
   const keelDocument = useMemo(() => createKeelDocument(SEED, [YSyncConfig]), []);
-  useEffect(() => () => keelDocument.destroy(), [keelDocument]);
+  /**
+   * **문서를 정리하지 않는다.**
+   *
+   * `useEffect(() => () => document.destroy(), [])` 로 두면 안 된다. React 의
+   * Strict Mode 는 개발 중 마운트→정리→재마운트를 한 번 흉내 내는데, 문서는
+   * `useMemo(..., [])` 로 한 번만 만들어져 재마운트 때 다시 안 만들어진다.
+   * 그래서 유령 정리가 부른 `destroy()` 가 그대로 남는다.
+   *
+   * 겉으로는 멀쩡해 보인다 — 글자도 고쳐지고 캔버스도 그려진다. 죽는 것은
+   * 되돌리기뿐이다. 재 봤더니 `destroy()` 뒤에도 편집은 되는데 `canUndo()` 가
+   * `false` 이고 `Cmd+Z` 가 아무 일도 안 한다. `UndoManager.destroy()` 가
+   * `afterTransaction` 구독을 떼어 내고 아무도 다시 붙이지 않기 때문이다.
+   *
+   * 문서는 이 화면과 수명이 같고 화면은 한 장뿐이라, 안 지워도 잃는 것이 없다.
+   * 나중에 **화면을 떠나지 않은 채 편집기만 내리는 길**이 생기면 그때는
+   * 문서를 효과 안에서 만들어 만듦과 지움을 짝지어야 한다.
+   */
 
   const source = useKeelDocument(keelDocument);
   const { document: parsed } = useMemo(() => parseSource(source), [source]);
@@ -3610,7 +4129,7 @@ EOF
 ## Task 15: 분할 조절 · 키보드 · 맞춤 단추 · 캔버스가 없을 때
 
 **Files:**
-- Create: `apps/web/src/components/split.tsx`
+- Create: `apps/web/src/components/split-ratio.ts`, `apps/web/src/components/split.tsx`
 - Modify: `apps/web/src/components/canvas-pane.tsx`, `apps/web/app/page.tsx`
 - Create: `apps/web/test/split-ratio.test.ts`
 
@@ -3629,7 +4148,13 @@ EOF
 
 ```ts
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MAX_RATIO, MIN_RATIO, clampRatio, loadRatio, saveRatio } from '../src/components/split.js';
+import {
+  MAX_RATIO,
+  MIN_RATIO,
+  clampRatio,
+  loadRatio,
+  saveRatio,
+} from '../src/components/split-ratio.js';
 
 /** localStorage 가 없는 곳(서버·사생활 보호 창)에서도 돌아야 한다 */
 function fakeStorage(): Storage {
@@ -3704,24 +4229,21 @@ describe('비율 저장', () => {
 Run: `cd apps/web && npx vitest run test/split-ratio.test.ts`
 Expected: FAIL — 모듈을 찾을 수 없다
 
-- [ ] **Step 3: 분할 컴포넌트를 쓴다**
+- [ ] **Step 3: 비율 다루기를 순수 모듈로 쓴다**
 
-`apps/web/src/components/split.tsx`:
+`apps/web/src/components/split-ratio.ts`:
 
-```tsx
-'use client';
-
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
-
+```ts
 /**
- * 좌우 분할.
+ * 분할 비율을 다루는 순수한 부분.
+ *
+ * 컴포넌트에서 떼어 둔 이유는 이 저장소의 방식 그대로다 — **검사할 값어치가
+ * 있는 것은 순수 모듈로 내린다.** 물리기와 저장은 틀리기 쉬운데(사생활 보호
+ * 창에서는 `localStorage` 를 읽는 것만으로 던진다) 컴포넌트 안에 있으면
+ * jsdom 없이 검사할 방법이 없다.
  *
  * 비율은 `localStorage` 에 둔다. **문서가 아니라 보는 사람의 편의**이므로
  * `Y.Doc` 에 넣지 않는다 — 넣으면 내가 창을 넓힌 것이 남의 화면을 밀어 버린다.
- *
- * 읽기도 쓰기도 던질 수 있다(사생활 보호 창에서는 접근만으로 던진다). 편의를
- * 위한 값이므로 못 쓰면 조용히 기본값으로 간다.
  */
 
 const KEY = 'keel:split';
@@ -3736,6 +4258,7 @@ export function clampRatio(value: number): number {
   return Math.min(MAX_RATIO, Math.max(MIN_RATIO, value));
 }
 
+/** 못 읽으면 조용히 기본값으로 간다. 문서가 아니라 편의를 위한 값이다 */
 export function loadRatio(): number {
   try {
     const raw = localStorage.getItem(KEY);
@@ -3751,10 +4274,25 @@ export function saveRatio(ratio: number): void {
   try {
     localStorage.setItem(KEY, String(clampRatio(ratio)));
   } catch {
-    // 못 적으면 그만이다. 문서가 아니다
+    // 못 적으면 그만이다
   }
 }
+```
 
+- [ ] **Step 4: 분할 컴포넌트를 쓴다**
+
+`apps/web/src/components/split.tsx`:
+
+```tsx
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import { DEFAULT_RATIO, clampRatio, loadRatio, saveRatio } from './split-ratio.js';
+
+/**
+ * 좌우 분할. 비율을 다루는 부분은 `split-ratio.ts` 에 있다.
+ */
 export function Split({ left, right }: { readonly left: ReactNode; readonly right: ReactNode }) {
   // 서버에서는 localStorage 가 없다. 첫 그리기는 기본값으로 하고 뒤에 맞춘다
   const [ratio, setRatio] = useState(DEFAULT_RATIO);
@@ -3823,18 +4361,18 @@ export function Split({ left, right }: { readonly left: ReactNode; readonly righ
 }
 ```
 
-- [ ] **Step 4: 검사를 돌려 통과하는 것을 본다**
+- [ ] **Step 5: 검사를 돌려 통과하는 것을 본다**
 
 Run: `cd apps/web && npx vitest run test/split-ratio.test.ts`
 Expected: PASS (6 tests)
 
-- [ ] **Step 5: 검사가 실제로 무는지 확인한다**
+- [ ] **Step 6: 검사가 실제로 무는지 확인한다**
 
-`loadRatio` 의 `try`/`catch` 를 걷어 낸다 → `localStorage 가 던져도 화면이 안 죽는다` 가 져야 한다.
+`split-ratio.ts` 의 `loadRatio` 에서 `try`/`catch` 를 걷어 낸다 → `localStorage 가 던져도 화면이 안 죽는다` 가 져야 한다.
 
 Expected: FAIL. 확인 후 되돌린다.
 
-- [ ] **Step 6: 맞춤 단추와 캔버스가 없을 때의 안내를 더한다**
+- [ ] **Step 7: 맞춤 단추와 캔버스가 없을 때의 안내를 더한다**
 
 `canvas-pane.tsx` 의 `return` 을 바꾼다:
 
@@ -3888,7 +4426,7 @@ Expected: FAIL. 확인 후 되돌린다.
   );
 }
 
-const fitButton: React.CSSProperties = {
+const fitButton: CSSProperties = {
   position: 'absolute',
   right: 12,
   bottom: 12,
@@ -3904,7 +4442,7 @@ const fitButton: React.CSSProperties = {
 
 `useState` 를 import 에 더한다.
 
-- [ ] **Step 7: 키보드를 붙인다**
+- [ ] **Step 8: 키보드를 붙인다**
 
 `page.tsx` 에 더한다:
 
@@ -3979,12 +4517,12 @@ import 를 더한다: `import { removeNode } from '../src/document/commands.js';
 
 `Split` 의 오른쪽 칸이 이미 `position: relative` 이므로 인스펙터가 거기 얹힌다.
 
-- [ ] **Step 8: 타입·린트·검사를 확인한다**
+- [ ] **Step 9: 타입·린트·검사를 확인한다**
 
 Run: `cd /Users/kisagge/my-projects/keel && pnpm typecheck && pnpm lint && pnpm test && pnpm --filter @keel/e2e e2e`
 Expected: 전부 통과
 
-- [ ] **Step 9: 눈으로 확인한다**
+- [ ] **Step 10: 눈으로 확인한다**
 
 Run: `pnpm --filter @keel/web dev`
 Expected:
@@ -3994,7 +4532,7 @@ Expected:
 - **편집기 안에서 `Delete` 를 눌러도 노드가 안 지워진다** (글자만 지워진다)
 - 오른쪽 아래 `맞춤` 을 누르면 내용이 화면에 맞는다
 
-- [ ] **Step 10: 커밋**
+- [ ] **Step 11: 커밋**
 
 ```bash
 git add apps/web
@@ -4026,6 +4564,7 @@ EOF
 
 **Files:**
 - Modify: `README.md`
+- Modify: `packages/dsl/src/types.ts` (머리 주석의 틀린 이유만)
 
 - [ ] **Step 1: 첫 문단의 어긋남을 고친다**
 
@@ -4044,7 +4583,51 @@ README 4행:
 끌기는 레이아웃만 바꾼다. `위치는 텍스트에 쓰지 않는다` 와 어긋나 있었고, 화면이
 생겨 실제로 끌어 보면 그 어긋남이 눈에 보인다.
 
-- [ ] **Step 2: `지금까지 된 것` 에 앱을 더한다**
+- [ ] **Step 2: 통째로 다시 쓰기 문단의 틀린 이유를 고친다**
+
+README 80–83행:
+
+```
+통째로 다시 쓰면 두 가지가 같이 깨진다 — 사람이 쓴 주석과 줄 순서가 사라지고,
+CRDT 에서 **같은 순간 다른 사람이 친 글자가 지워진다.** 통째로 쓰기는 "전부
+지우고 전부 넣기" 라서, 상대의 삽입이 지우기 구간 안에 있으면 병합이 아니라
+소멸이 된다.
+```
+
+→
+
+```
+통째로 다시 쓰면 두 가지가 같이 깨진다 — 사람이 쓴 주석과 줄 순서가 사라지고,
+CRDT 에서 **같은 순간 둘이 고치면 문서가 둘로 불어난다.** Yjs 는 자리가 아니라
+항목 단위로 지우므로 내가 못 본 상대의 삽입은 내 지우기에 안 걸린다. 그래서
+양쪽이 각자 쓴 전문이 나란히 살아남아, 이음매에서 줄이 뭉개지고 같은 이름의
+노드가 두 벌씩 생기고 파서가 진단을 쏟는다. 재 봤다 — 구간 수정은 4줄·진단 0,
+통째로 쓰기는 7줄·진단 4 (`apps/web/test/concurrent.test.ts`).
+```
+
+**이 줄은 틀린 것이었다.** Yjs 에서 통째로 다시 써도 상대의 삽입은 *소멸하지
+않는다*. 실제로 일어나는 일은 더 나쁜 쪽이라 결론은 그대로지만, 이유가 틀리면
+다음 사람이 엉뚱한 것을 고친다.
+
+같은 주장이 세 군데 더 있었다. `packages/dsl/src/edits.ts` 와
+`apps/web/src/document/text-edits.ts` 는 이미 고쳤고, **`packages/dsl/src/types.ts`
+8행이 남아 있다.** 그것도 같이 고친다:
+
+```
+ * 통째로 다시 쓰면 CRDT 에서 **다른 사람이 같은 순간에 친 글자가 지워진다.**
+ * 그래서 파서는 AST 가 아니라 위치를 보존한 CST 를 만든다.
+```
+
+→
+
+```
+ * 통째로 다시 쓰면 CRDT 에서 **같은 순간 둘이 고친 문서가 둘로 불어난다.**
+ * Yjs 는 자리가 아니라 항목 단위로 지우므로 상대의 삽입이 소멸하지는 않지만,
+ * 양쪽 전문이 나란히 살아남아 이음매가 뭉개지고 노드가 두 벌씩 생긴다.
+ * 그래서 파서는 AST 가 아니라 위치를 보존한 CST 를 만든다.
+```
+
+- [ ] **Step 3: `지금까지 된 것` 에 앱을 더한다**
 
 ```markdown
 - `@keel/web` — 좌우 분할 에디터. 텍스트↔캔버스 양방향, 팬·줌, 진단, 인스펙터,
@@ -4059,7 +4642,7 @@ dsl 71 · graph 16 · renderer 381 · web <숫자>
 
 `<숫자>` 는 `pnpm test` 의 `@keel/web` 결과를 그대로 적는다.
 
-- [ ] **Step 3: `아직 안 한 것` 에서 에디터 화면을 뺀다**
+- [ ] **Step 4: `아직 안 한 것` 에서 에디터 화면을 뺀다**
 
 `- **에디터 화면** (apps/web, Next.js) …` 줄을 지운다.
 
@@ -4071,14 +4654,14 @@ dsl 71 · graph 16 · renderer 381 · web <숫자>
   `Map<string, string>` 으로 넓히는 것이 첫 일감이다
 ```
 
-- [ ] **Step 4: 검사 표에 줄을 더한다**
+- [ ] **Step 5: 검사 표에 줄을 더한다**
 
 ```markdown
-| `같은 문서를 둘이 고친다` | `Y.Doc` 둘을 손으로 붙여, 통째로 다시 쓰기로 바꾸면 한쪽의 고침이 상대의 지우기 구간에 먹혀 사라지는 것을 눈으로 봤다. `edits.ts` 가 있는 이유를 서버 없이 증명한다 |
+| `같은 문서를 둘이 고친다` | `Y.Doc` 둘을 손으로 붙여, 통째로 다시 쓰기로 바꾸면 양쪽이 각자 쓴 전문이 나란히 살아남아 문서가 둘로 불어나는 것을 눈으로 봤다(구간 수정 4줄·진단 0 / 통째로 쓰기 7줄·진단 4). `edits.ts` 가 있는 이유를 서버 없이 증명한다 |
 | `제스처 > 문턱` | 문턱이 없으면 고르려고 눌렀는데 1px 밀려서 노드가 움직인다. 손이 떨리는 사람에게는 노드를 고를 방법이 아예 없어진다 |
 ```
 
-- [ ] **Step 5: 전체 검증**
+- [ ] **Step 6: 전체 검증**
 
 Run:
 ```bash
@@ -4087,10 +4670,10 @@ pnpm test && pnpm typecheck && pnpm lint && pnpm --filter @keel/e2e e2e
 ```
 Expected: 전부 통과. README 에 적은 숫자가 실제 결과와 같은지 눈으로 견준다.
 
-- [ ] **Step 6: 커밋**
+- [ ] **Step 7: 커밋**
 
 ```bash
-git add README.md
+git add README.md packages/dsl/src/types.ts
 git commit -F - <<'EOF'
 README: 에디터 화면을 지금까지 된 것으로 옮긴다
 
@@ -4102,8 +4685,14 @@ README: 에디터 화면을 지금까지 된 것으로 옮긴다
 되지만, PaintOptions.selection 이 Set<string> 이라 사람별 색을 못 담는다.
 
 검사 표에 두 줄을 더했다. 특히 두 Y.Doc 을 붙여 본 검사는 통째로 다시 쓰기로
-바꾸면 한쪽의 고침이 상대의 지우기 구간에 먹혀 사라지는 것을 눈으로 보여 준다 —
+바꾸면 양쪽 전문이 나란히 살아남아 문서가 둘로 불어나는 것을 눈으로 보여 준다 —
 packages/dsl 의 구간 수정 설계가 왜 있는지를 서버 없이 증명한다.
+
+README 와 dsl/types.ts 의 "같은 순간 다른 사람이 친 글자가 지워진다" 도 고쳤다.
+Yjs 는 자리가 아니라 항목 단위로 지우므로 상대의 삽입은 소멸하지 않는다 — 대신
+양쪽 전문이 나란히 남아 문서가 둘로 불어난다. 결론은 같지만 이유가 틀리면 다음
+사람이 엉뚱한 것을 고친다. 같은 주장이 있던 edits.ts 와 text-edits.ts 의 주석은
+앞서 고쳤고 이 둘이 남아 있었다.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF

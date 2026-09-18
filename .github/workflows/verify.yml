@@ -1,0 +1,61 @@
+# 푸시마다 게이트를 전부 돌린다 — 손으로 하나씩 돌리던 것을 기계가 한다.
+#
+# e2e 는 CI 에서 `reuseExistingServer` 가 꺼진다(Actions 가 CI=true 를 넣는다).
+# 로컬에서 죽은 dev 서버를 물고 4개가 통째로 거짓 실패하던 문제는 여기서는
+# 생기지 않는다 — 그쪽은 scripts/guard-dev-server.mjs 가 막는다.
+name: verify
+
+on: push
+
+concurrency:
+  # 같은 브랜치에 연달아 밀면 앞의 실행은 버린다.
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        # 버전은 루트 package.json 의 packageManager 를 따른다.
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # 싼 것부터. 여기서 깨지면 build/e2e 까지 갈 것 없다.
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      - run: pnpm build
+
+      # 브라우저는 무겁다. Playwright 버전이 그대로면 받아둔 것을 쓴다.
+      - name: Playwright 브라우저 캐시
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Chromium 설치
+        run: pnpm --filter @keel/e2e exec playwright install --with-deps chromium
+
+      - run: pnpm turbo run e2e
+
+      # 깨졌을 때 무엇이 보였는지 남긴다.
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+          if-no-files-found: ignore

@@ -1,0 +1,135 @@
+import { describe, expect, it } from 'vitest';
+import { KEEL_LOCAL, KEEL_SEED, createKeelDocument } from '../src/document/keel-document.js';
+
+describe('문서 배선', () => {
+  it('씨앗을 소스에 넣고 시작한다', () => {
+    const document = createKeelDocument('service a\nservice b');
+    expect(document.source.toString()).toBe('service a\nservice b');
+    document.destroy();
+  });
+
+  it('레이아웃은 비어 있다 — 사람이 옮긴 노드만 들어간다', () => {
+    const document = createKeelDocument('service a');
+    expect(document.layout.size).toBe(0);
+    document.destroy();
+  });
+
+  /**
+   * 씨앗을 되돌릴 수 있게 두면 화면을 열자마자 Cmd+Z 한 번에 문서가 통째로
+   * 사라진다. 씨앗은 "사람이 한 일" 이 아니다.
+   */
+  it('씨앗은 되돌려지지 않는다', () => {
+    const document = createKeelDocument('service a');
+    document.undoManager.undo();
+    expect(document.source.toString()).toBe('service a');
+    document.destroy();
+  });
+
+  /**
+   * 위 검사는 **순서**가 지켜 준다 — 씨앗이 `UndoManager` 보다 먼저 들어간다.
+   * origin 을 따로 둔 값은 여기서 나온다: 이미 살아 있는 되돌리기 옆에 얹어도
+   * 안 되돌아가야 한다. 서버에서 받은 문서를 얹을 때가 그 자리다.
+   */
+  it('되돌리기가 살아 있는 동안 넣은 것도 KEEL_SEED 면 안 되돌아간다', () => {
+    const document = createKeelDocument('service a');
+
+    document.doc.transact(() => document.source.insert(9, ' "나중"'), KEEL_SEED);
+    document.undoManager.undo();
+
+    expect(document.source.toString()).toBe('service a "나중"');
+    document.destroy();
+  });
+
+  it('KEEL_LOCAL 로 한 텍스트 수정은 되돌려진다', () => {
+    const document = createKeelDocument('service a');
+
+    document.doc.transact(() => document.source.insert(9, ' "이름"'), KEEL_LOCAL);
+    expect(document.source.toString()).toBe('service a "이름"');
+
+    document.undoManager.undo();
+    expect(document.source.toString()).toBe('service a');
+    document.destroy();
+  });
+
+  it('KEEL_LOCAL 로 한 레이아웃 수정도 되돌려진다', () => {
+    const document = createKeelDocument('service a');
+
+    document.doc.transact(() => document.layout.set('a', { x: 10, y: 20 }), KEEL_LOCAL);
+    expect(document.layout.get('a')).toEqual({ x: 10, y: 20 });
+
+    document.undoManager.undo();
+    expect(document.layout.get('a')).toBeUndefined();
+    document.destroy();
+  });
+
+  /**
+   * 역사가 둘로 나뉘면 사람이 "방금 뭘 되돌렸는지" 를 못 따라간다.
+   * 친 글자와 끈 노드가 한 역사여야 한다.
+   *
+   * **`stopCapturing()` 이 걸음의 경계다.** Yjs 는 짧은 사이에 일어난 수정을
+   * 한 걸음으로 묶는다(기본 500ms) — 글자를 칠 때는 그게 맞다. 대신 캔버스
+   * 조작처럼 "한 번의 행동" 이 끝난 자리에서는 경계를 그어 준다.
+   * `commands.ts` 가 명령마다 이것을 부른다.
+   */
+  it('텍스트와 레이아웃이 한 역사로 되돌아간다', () => {
+    const document = createKeelDocument('service a');
+
+    document.doc.transact(() => document.source.insert(9, ' "하나"'), KEEL_LOCAL);
+    document.undoManager.stopCapturing();
+    document.doc.transact(() => document.layout.set('a', { x: 1, y: 2 }), KEEL_LOCAL);
+
+    document.undoManager.undo();
+    expect(document.layout.get('a')).toBeUndefined();
+    expect(document.source.toString()).toBe('service a "하나"');
+
+    document.undoManager.undo();
+    expect(document.source.toString()).toBe('service a');
+    document.destroy();
+  });
+
+  /**
+   * 반대쪽도 묶어 둔다 — **빠르게 친 글자는 한 걸음으로 합쳐져야 한다.**
+   *
+   * `captureTimeout: 0` 을 주면 이 검사가 진다. 그 값이면 `Cmd+Z` 가 글자를
+   * 한 자씩 지워, 편집기로 쓸 수 없는 물건이 된다. 경계를 세우고 싶으면
+   * 시간을 0 으로 만드는 게 아니라 `stopCapturing()` 을 부른다.
+   */
+  it('빠르게 친 글자는 한 걸음으로 묶인다', () => {
+    const document = createKeelDocument('service a');
+
+    for (const ch of ' "이름"') {
+      document.doc.transact(() => document.source.insert(document.source.length, ch), KEEL_LOCAL);
+    }
+    expect(document.source.toString()).toBe('service a "이름"');
+
+    document.undoManager.undo();
+    expect(document.source.toString()).toBe('service a');
+    document.destroy();
+  });
+
+  /**
+   * y-codemirror.next 는 로컬 편집을 `YSyncConfig` 인스턴스를 origin 으로 삼아
+   * 얹는다. Yjs 의 UndoManager 는 origin 을 **생성자로도** 견주므로
+   * (UndoManager.js:216) 클래스를 넣어 두면 인스턴스를 손에 안 쥐어도 걸린다.
+   */
+  it('바깥에서 넘긴 origin 도 클래스로 추적한다', () => {
+    class FakeSyncConfig {}
+    const config = new FakeSyncConfig();
+
+    const document = createKeelDocument('service a', [FakeSyncConfig]);
+    document.doc.transact(() => document.source.insert(9, ' "밖"'), config);
+
+    document.undoManager.undo();
+    expect(document.source.toString()).toBe('service a');
+    document.destroy();
+  });
+
+  it('추적하지 않는 origin 은 되돌려지지 않는다', () => {
+    const document = createKeelDocument('service a');
+    document.doc.transact(() => document.source.insert(9, ' "남"'), Symbol('원격'));
+
+    document.undoManager.undo();
+    expect(document.source.toString()).toBe('service a "남"');
+    document.destroy();
+  });
+});
