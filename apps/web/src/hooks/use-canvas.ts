@@ -11,7 +11,7 @@ import {
   screenToWorld,
 } from '@keel/renderer';
 import type { Ctx2D, Hit, Point, Scene, SpatialIndex, Viewport } from '@keel/renderer';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { RefObject } from 'react';
 
 /**
@@ -166,5 +166,13 @@ export function useCanvas(options: UseCanvasOptions): UseCanvas {
     if (canvas.current !== null) canvas.current.style.cursor = cursor;
   }, []);
 
-  return { canvasRef, invalidate, viewportRef, toWorld, toScreen, hitAt, fit, setCursor };
+  /**
+   * **객체째 메모한다.** 안의 것은 전부 안정적인데 자루가 매 렌더 새 참조면,
+   * 이것을 deps 에 넣은 쪽(`canvas-pane` 의 포인터 처리들)이 매 렌더 다시
+   * 만들어진다. 그리기를 ref 로 돌려 재조정을 0으로 만든 값이 그 자리에서 샌다.
+   */
+  return useMemo(
+    () => ({ canvasRef, invalidate, viewportRef, toWorld, toScreen, hitAt, fit, setCursor }),
+    [canvasRef, invalidate, toWorld, toScreen, hitAt, fit, setCursor],
+  );
 }

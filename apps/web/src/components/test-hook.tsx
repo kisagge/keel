@@ -32,10 +32,13 @@ export interface SceneSummary {
   readonly groups: readonly string[];
 }
 
-declare global {
-  interface Window {
-    __keel?: { sceneSummary: () => SceneSummary };
-  }
+/**
+ * **전역 `Window` 를 넓히지 않는다.** `declare global` 로 적으면 `__keel` 이
+ * `apps/web` 어디서나 보이는 값이 되어, 검사용 통로가 제품 코드에서도 쓸 수
+ * 있는 것처럼 보인다. 여기서만 좁혀 쓴다. e2e 쪽은 제 파일에 따로 적는다.
+ */
+interface WindowWithKeel {
+  __keel?: { sceneSummary: () => SceneSummary };
 }
 
 export function TestHook({
@@ -48,7 +51,8 @@ export function TestHook({
   useEffect(() => {
     if (process.env.NODE_ENV === 'production') return;
 
-    window.__keel = {
+    const target = window as unknown as WindowWithKeel;
+    target.__keel = {
       sceneSummary: () => {
         const scene = sceneAt();
         return {
@@ -69,7 +73,7 @@ export function TestHook({
     };
 
     return () => {
-      delete window.__keel;
+      delete target.__keel;
     };
   }, [sceneAt, viewportRef]);
 

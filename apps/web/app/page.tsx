@@ -145,7 +145,10 @@ export default function EditorPage() {
    */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      const inEditor = e.target instanceof HTMLElement && e.target.closest('.cm-editor') !== null;
+      // 편집기의 실제 엘리먼트에 물어본다. `.cm-editor` 라는 클래스 이름으로
+      // 찾으면 CodeMirror 가 이름을 바꾸는 날 **조용히** 가드가 풀린다.
+      const view = viewRef.current;
+      const inEditor = view !== null && e.target instanceof Node && view.dom.contains(e.target);
       const inField =
         e.target instanceof HTMLElement &&
         ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);

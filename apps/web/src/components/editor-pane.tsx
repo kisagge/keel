@@ -8,6 +8,7 @@ import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
+import { toCmDiagnostics } from '../document/cm-diagnostics.js';
 import { parseSource } from '../document/derive.js';
 import type { KeelDocument } from '../document/keel-document.js';
 
@@ -49,13 +50,7 @@ export function EditorPane({
      */
     const keelLinter = linter((view): CmDiagnostic[] => {
       const { document: parsed } = parseSource(view.state.doc.toString());
-      return parsed.diagnostics.map((d) => ({
-        from: d.span.start,
-        to: Math.max(d.span.start + 1, d.span.end),
-        severity: d.severity,
-        message: d.message,
-        source: d.code,
-      }));
+      return toCmDiagnostics(parsed.diagnostics, view.state.doc.length);
     });
 
     const view = new EditorView({

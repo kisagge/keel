@@ -127,3 +127,25 @@ test('캔버스에서 끌고 바로 Cmd+Z 를 누르면 돌아온다', async ({ 
     })
     .toEqual({ x: node.x, y: node.y });
 });
+
+/**
+ * 편집기 안에서 누른 `Delete` 는 노드를 지우지 않는다.
+ *
+ * 캔버스 쪽 글쇠 처리가 "편집기 안인가" 를 판별하는 방법을 바꿀 때 이 검사가
+ * 지킨다 — 잘못 바꾸면 글자를 지우려던 Delete 가 고른 노드를 함께 지운다.
+ */
+test('편집기 안에서 Delete 를 눌러도 고른 노드가 남는다', async ({ page }) => {
+  const before = await sceneSummary(page);
+  const node = before.nodes.find((n) => n.id === 'orders');
+  if (node === undefined) throw new Error('씨앗에 orders 가 없다');
+
+  // 캔버스에서 노드를 고른다
+  await page.locator('canvas').click({ position: { x: node.screenX, y: node.screenY } });
+
+  // 그 다음 편집기 안에 초점을 두고 Delete 를 누른다
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Delete');
+
+  const after = await sceneSummary(page);
+  expect(after.nodes.map((n) => n.id)).toContain('orders');
+});

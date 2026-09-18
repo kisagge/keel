@@ -118,6 +118,9 @@ export function CanvasPane({ document, graph, selection, onSelect }: CanvasPaneP
       );
       invalidate();
     },
+    // `viewportRef` 는 ref 라 참조가 안 바뀌므로 없어도 되지만, `canvas` 에서
+    // 구조분해해 온 것이라 exhaustive-deps 가 그것을 증명하지 못해 경고한다.
+    // 넣어 두는 값은 0 이고, 빼면 규칙 억제가 필요하다. 넣어 둔다.
     [invalidate, toScreen, viewportRef],
   );
 
@@ -257,7 +260,14 @@ export function CanvasPane({ document, graph, selection, onSelect }: CanvasPaneP
         맞춤
       </button>
 
-      <TestHook sceneAt={sceneAt} viewportRef={viewportRef} />
+      {/*
+        배포판에는 아예 안 붙인다. `TestHook` 안에도 같은 문지기가 있지만
+        그쪽은 effect 라 컴포넌트는 마운트된다 — 여기서 걸러야 번들러가
+        통째로 덜어낼 수 있다.
+      */}
+      {process.env.NODE_ENV !== 'production' && (
+        <TestHook sceneAt={sceneAt} viewportRef={viewportRef} />
+      )}
     </div>
   );
 }
