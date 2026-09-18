@@ -64,8 +64,16 @@ export default function EditorPage() {
    * 문서를 효과 안에서 만들어 만듦과 지움을 짝지어야 한다.
    */
 
+  /**
+   * **여기서 한 번만 파싱한다.** 나온 그래프를 캔버스에 그대로 넘긴다.
+   *
+   * 예전에는 이 줄이 그래프를 세워 놓고 버리고, `CanvasPane` 이 같은 글자를
+   * 다시 파싱해 그래프를 또 세웠다 — 글자 하나 칠 때마다 파싱 두 번에 그래프
+   * 두 번, 그중 하나는 만들자마자 버리는 것이었다. (편집기 안의 린터가 제
+   * 상태를 보고 한 번 더 파싱하는 것은 어쩔 수 없다. 그쪽 주석에 적어 두었다.)
+   */
   const source = useKeelDocument(keelDocument);
-  const { document: parsed } = useMemo(() => parseSource(source), [source]);
+  const { document: parsed, graph } = useMemo(() => parseSource(source), [source]);
 
   const viewRef = useRef<EditorView | null>(null);
   const goTo = useCallback((position: number) => {
@@ -95,7 +103,6 @@ export default function EditorPage() {
         id: node.id,
         nodeKind: node.kind,
         rawLabel: node.label,
-        caption: undefined,
         position: node.span.start,
       };
     }
@@ -105,8 +112,6 @@ export default function EditorPage() {
       return {
         kind: 'edge',
         id: edge.key,
-        nodeKind: undefined,
-        rawLabel: undefined,
         caption: `${edge.from} → ${edge.to}`,
         position: edge.span.start,
       };
@@ -117,8 +122,6 @@ export default function EditorPage() {
       return {
         kind: 'group',
         id: group.id,
-        nodeKind: undefined,
-        rawLabel: undefined,
         caption: `그룹 ${group.label ?? group.id}`,
         position: group.headerSpan.start,
       };
@@ -128,10 +131,17 @@ export default function EditorPage() {
   }, [parsed, selectedId]);
 
   /**
-   * `Delete` 로 고른 노드를 지우고 `Esc` 로 선택을 푼다.
+   * 캔버스 쪽의 글쇠 — `Delete` 로 지우고, `Esc` 로 선택을 풀고, `Cmd+Z` 로 되돌린다.
    *
    * **편집기 안에서 친 것은 건드리지 않는다.** 글자를 지우려고 누른 Delete 가
-   * 노드를 지워 버리면 되돌릴 수 있어도 무섭다.
+   * 노드를 지워 버리면 되돌릴 수 있어도 무섭다. 되돌리기도 마찬가지다 — 편집기
+   * 안에서는 CodeMirror 의 `yUndoManagerKeymap` 이 같은 역사를 이미 부르므로,
+   * 여기서 또 부르면 한 번 눌러 두 걸음이 되돌아간다.
+   *
+   * **되돌리기를 여기에도 둬야 하는 이유는 재서 알았다.** 노드를 끌고 나면
+   * 초점이 `<body>` 에 있고, 그 역사를 부르는 글쇠는 편집기 안에만 있었다.
+   * 그래서 `Cmd+Z` 가 아무 일도 안 했다 — 텍스트 창을 먼저 눌러야만 돌아갔다.
+   * 문서와 자리를 `UndoManager` 하나로 묶은 값이 통째로 새고 있던 자리다.
    */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -140,6 +150,20 @@ export default function EditorPage() {
         e.target instanceof HTMLElement &&
         ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);
       if (inEditor || inField) return;
+
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) keelDocument.undoManager.redo();
+        else keelDocument.undoManager.undo();
+        return;
+      }
+      // 윈도우·리눅스의 다시 하기. CodeMirror 쪽 키맵도 이것을 받는다
+      if (mod && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        keelDocument.undoManager.redo();
+        return;
+      }
 
       if (e.key === 'Escape') {
         clearSelection();
@@ -176,7 +200,12 @@ export default function EditorPage() {
       }
       right={
         <>
-          <CanvasPane document={keelDocument} selection={selection} onSelect={onSelect} />
+          <CanvasPane
+            document={keelDocument}
+            graph={graph}
+            selection={selection}
+            onSelect={onSelect}
+          />
           <Inspector
             target={target}
             document={keelDocument}

@@ -14,15 +14,37 @@ import type { Point, Viewport } from '@keel/renderer';
 export interface WheelLike {
   readonly deltaX: number;
   readonly deltaY: number;
+  /** `WheelEvent.deltaMode` — 0 픽셀, 1 줄, 2 쪽 */
+  readonly deltaMode: number;
   readonly ctrlKey: boolean;
 }
 
 /** 휠 한 칸이 줌을 얼마나 바꾸는가. 지수로 걸어 어느 배율에서도 느낌이 같다 */
 const ZOOM_PER_PIXEL = 1 / 250;
 
+/**
+ * **델타의 단위가 브라우저마다 다르다.**
+ *
+ * Chrome·Safari 는 픽셀로 보내지만 Firefox 는 마우스 휠을 **줄 단위**로 보낸다
+ * (`deltaMode: 1`, 한 칸에 `deltaY ≈ 3`). 그것을 픽셀로 읽으면 한 칸에 3px 가
+ * 밀려, Firefox 에서는 화면이 아예 안 움직이는 것처럼 보인다.
+ *
+ * 줄 높이와 쪽 높이는 브라우저가 안 알려 주므로 어림값을 쓴다. 정확할 필요가
+ * 없다 — 사람이 "한 칸에 이만큼" 을 느끼기만 하면 된다.
+ */
+const PIXELS_PER_LINE = 16;
+const PIXELS_PER_PAGE = 400;
+
+function toPixels(delta: number, deltaMode: number): number {
+  if (deltaMode === 1) return delta * PIXELS_PER_LINE;
+  if (deltaMode === 2) return delta * PIXELS_PER_PAGE;
+  return delta;
+}
+
 export function wheelToViewport(viewport: Viewport, e: WheelLike, cursor: Point): Viewport {
+  const deltaY = toPixels(e.deltaY, e.deltaMode);
   if (e.ctrlKey) {
-    return zoomAt(viewport, cursor, Math.exp(-e.deltaY * ZOOM_PER_PIXEL));
+    return zoomAt(viewport, cursor, Math.exp(-deltaY * ZOOM_PER_PIXEL));
   }
-  return panBy(viewport, -e.deltaX, -e.deltaY);
+  return panBy(viewport, -toPixels(e.deltaX, e.deltaMode), -deltaY);
 }

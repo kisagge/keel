@@ -163,10 +163,10 @@ Node 24 와 pnpm 11 이 필요하다. `.nvmrc` 와 `packageManager` 필드에 �
 - `@keel/renderer` — 장면 기하, 그룹 경계, 엣지 접점·화살촉·자기 고리, 팬·줌,
   뷰포트 컬링, 균일 격자 히트테스트, Canvas 2D 그리기 (테스트 381)
 - `@keel/web` — 좌우 분할 에디터. 텍스트↔캔버스 양방향, 팬·줌, 진단, 인스펙터,
-  하나짜리 되돌리기 역사 (검사 77, e2e 3)
+  하나짜리 되돌리기 역사 (검사 82, e2e 4)
 
 ```
-dsl 71 · graph 16 · renderer 381 · web 77
+dsl 71 · graph 16 · renderer 381 · web 82
 ```
 
 렌더러는 아직 **임시 배치**를 쓴다(`stopgap-layout.ts`). 겹치지 않고 결정적이라는

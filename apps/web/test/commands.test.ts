@@ -149,6 +149,38 @@ describe('되돌리기 걸음', () => {
     expect(document.source.toString()).toBe(SOURCE);
     document.destroy();
   });
+
+  /**
+   * **인스펙터의 이름 칸은 조작이 아니라 타자다.**
+   *
+   * 입력칸이 글자마다 `renameNode` 를 부른다. 명령마다 경계를 그으면 `Cmd+Z` 가
+   * 한 자씩 지워, `captureTimeout: 0` 을 거절했던 바로 그 물건이 된다.
+   * 재 봤더니 실제로 그랬다 — 세 글자에 걸음이 셋, `"스토어"` 에서 한 번
+   * 되돌리면 `"스토"` 였다.
+   */
+  it('이어서 이름을 고치는 동안은 한 걸음이다', () => {
+    const document = createKeelDocument(SOURCE);
+
+    for (const label of ['주', '주문', '주문 API']) renameNode(document, 'api', label);
+    expect(document.source.toString()).toContain('service api "주문 API"');
+
+    document.undoManager.undo();
+    expect(document.source.toString()).toBe(SOURCE);
+    document.destroy();
+  });
+
+  /** 다른 노드로 옮겨 가면 경계를 긋는다 — 그것은 다른 행동이다 */
+  it('다른 노드의 이름을 고치면 따로 되돌아간다', () => {
+    const document = createKeelDocument(SOURCE);
+
+    renameNode(document, 'api', '주문 API');
+    renameNode(document, 'orders', '주문 저장소');
+
+    document.undoManager.undo();
+    expect(document.source.toString()).toContain('db orders "주문 DB"');
+    expect(document.source.toString()).toContain('service api "주문 API"');
+    document.destroy();
+  });
 });
 
 describe('옮기기', () => {

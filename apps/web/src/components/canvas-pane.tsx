@@ -1,15 +1,15 @@
 'use client';
 
+import type { Graph } from '@keel/graph';
 import type { Hit } from '@keel/renderer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { moveNode } from '../document/commands.js';
-import { createMeasure, parseSource, sceneOf } from '../document/derive.js';
+import { createMeasure, sceneOf } from '../document/derive.js';
 import type { KeelDocument } from '../document/keel-document.js';
 import { withDrag, yMapReader } from '../document/layout-reader.js';
 import type { Drag } from '../document/layout-reader.js';
 import { useCanvas } from '../hooks/use-canvas.js';
-import { useKeelDocument } from '../hooks/use-keel-document.js';
 import { IDLE, onPointerDown, onPointerMove, onPointerUp } from '../interaction/gesture.js';
 import type { Gesture, Intent } from '../interaction/gesture.js';
 import { wheelToViewport } from '../interaction/wheel.js';
@@ -25,13 +25,13 @@ function assertNever(value: never): never {
 
 export interface CanvasPaneProps {
   readonly document: KeelDocument;
+  /** 화면이 이미 세운 그래프. 여기서 다시 파싱하지 않는다 */
+  readonly graph: Graph;
   readonly selection: ReadonlySet<string>;
   readonly onSelect: (hit: Hit | undefined) => void;
 }
 
-export function CanvasPane({ document, selection, onSelect }: CanvasPaneProps) {
-  const source = useKeelDocument(document);
-
+export function CanvasPane({ document, graph, selection, onSelect }: CanvasPaneProps) {
   const dragRef = useRef<Drag | undefined>(undefined);
 
   /**
@@ -47,7 +47,6 @@ export function CanvasPane({ document, selection, onSelect }: CanvasPaneProps) {
     return createMeasure(window.document.createElement('canvas').getContext('2d') ?? undefined);
   }, []);
 
-  const { graph } = useMemo(() => parseSource(source), [source]);
   // graphRef.current = graph 를 렌더 중에 바로 하지 않는다 — 렌더는 순수해야
   // 한다. sceneAt 은 rAF 로 늦게 불리므로 커밋 뒤 effect 에서 고쳐도 늦지 않다.
   const graphRef = useRef(graph);
@@ -79,10 +78,10 @@ export function CanvasPane({ document, selection, onSelect }: CanvasPaneProps) {
     [canvasRef],
   );
 
-  // 문서가 바뀌면 다시 그린다
+  // 문서가 바뀌면 다시 그린다 — 그래프는 소스가 바뀔 때만 새로 만들어진다
   useEffect(() => {
     invalidate();
-  }, [source, invalidate]);
+  }, [graph, invalidate]);
 
   /**
    * 고른 것이 바뀌어도 다시 그린다.
@@ -114,7 +113,7 @@ export function CanvasPane({ document, selection, onSelect }: CanvasPaneProps) {
       e.preventDefault();
       viewportRef.current = wheelToViewport(
         viewportRef.current,
-        { deltaX: e.deltaX, deltaY: e.deltaY, ctrlKey: e.ctrlKey },
+        { deltaX: e.deltaX, deltaY: e.deltaY, deltaMode: e.deltaMode, ctrlKey: e.ctrlKey },
         toScreen(e.clientX, e.clientY),
       );
       invalidate();

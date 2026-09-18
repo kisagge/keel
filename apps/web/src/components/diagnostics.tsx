@@ -2,6 +2,12 @@
 
 import type { Diagnostic } from '@keel/dsl';
 
+const severityColor: Record<Diagnostic['severity'], string> = {
+  error: '#b91c1c',
+  warning: '#b45309',
+  info: 'var(--keel-muted)',
+};
+
 /**
  * 진단 목록.
  *
@@ -39,7 +45,9 @@ export function DiagnosticsList({
               background: 'none',
               textAlign: 'left',
               cursor: 'pointer',
-              color: d.severity === 'error' ? '#b91c1c' : 'var(--keel-muted)',
+              // 셋을 눈으로 갈라야 한다 — 경고를 알림과 같은 색으로 두면
+              // "선언 없이 생긴 노드" 같은 조용한 경고가 목록에 묻힌다
+              color: severityColor[d.severity],
             }}
           >
             {d.line + 1}행 · {d.message}

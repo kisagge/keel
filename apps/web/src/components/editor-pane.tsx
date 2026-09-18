@@ -41,8 +41,11 @@ export function EditorPane({
      * 화면 쪽이 이미 파싱해 두었으니 그것을 넘기고 싶지만, CodeMirror 의
      * `linter()` 는 제 상태만 보고 스스로 답하는 콜백이라 넘길 통로가 없다.
      * 통로를 내려면 컴포넌트 경계를 바꿔야 하는데, 파서가 회복형이라 한 번 더
-     * 도는 값이 싸서 그 값을 치를 이유가 없다. 지금은 두 번 돈다고 적어 둔다 —
-     * 안 그러면 다음 사람이 "넘겨 받는다" 는 주석을 믿고 엉뚱한 곳을 고친다.
+     * 도는 값이 싸서 그 값을 치를 이유가 없다.
+     *
+     * 그래서 글자 하나에 파싱이 **두 번** 돈다 — `page.tsx` 에서 한 번(그 결과가
+     * 진단 목록과 캔버스로 함께 간다), 여기서 한 번. 사실대로 적어 둔다.
+     * "넘겨 받는다" 고 적어 두면 다음 사람이 엉뚱한 곳을 고친다.
      */
     const keelLinter = linter((view): CmDiagnostic[] => {
       const { document: parsed } = parseSource(view.state.doc.toString());
