@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound } from 'next/navigation.js';
 import { Editor } from '../../../src/components/editor.js';
 import { findDocument } from '../../../src/api.js';
 
