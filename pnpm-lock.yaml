@@ -114,6 +114,9 @@ importers:
       '@codemirror/view':
         specifier: 6.43.12
         version: 6.43.12
+      '@keel/contract':
+        specifier: workspace:*
+        version: link:../../packages/contract
       '@keel/dsl':
         specifier: workspace:*
         version: link:../../packages/dsl

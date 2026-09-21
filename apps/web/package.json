@@ -13,13 +13,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@keel/dsl": "workspace:*",
-    "@keel/graph": "workspace:*",
-    "@keel/renderer": "workspace:*",
     "@codemirror/commands": "6.11.1",
     "@codemirror/lint": "6.9.7",
     "@codemirror/state": "6.7.5",
     "@codemirror/view": "6.43.12",
+    "@keel/contract": "workspace:*",
+    "@keel/dsl": "workspace:*",
+    "@keel/graph": "workspace:*",
+    "@keel/renderer": "workspace:*",
     "next": "16.3.5",
     "react": "19.3.0",
     "react-dom": "19.3.0",

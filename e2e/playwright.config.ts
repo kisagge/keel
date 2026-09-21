@@ -11,11 +11,23 @@ export default defineConfig({
   testDir: '.',
   timeout: 30_000,
   use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:3000' },
-  webServer: {
-    command: 'pnpm --filter @keel/web dev',
-    url: 'http://localhost:3000',
-    cwd: '..',
-    reuseExistingServer: !process.env['CI'],
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      // api 에는 `url` 대신 `port` 를 쓴다. `url` 은 2xx 응답을 기다리는데,
+      // 이 서버의 모든 경로는 문서 id 를 요구해서 2xx 를 낼 고정 주소가 없다.
+      // 건강 확인용 경로를 제품에 새로 뚫는 것보다 포트를 보는 쪽이 정직하다.
+      command: 'pnpm --filter @keel/api exec prisma migrate deploy && pnpm --filter @keel/api dev',
+      port: 4000,
+      cwd: '..',
+      reuseExistingServer: !process.env['CI'],
+      timeout: 120_000,
+    },
+    {
+      command: 'pnpm --filter @keel/web dev',
+      url: 'http://localhost:3000',
+      cwd: '..',
+      reuseExistingServer: !process.env['CI'],
+      timeout: 120_000,
+    },
+  ],
 });
