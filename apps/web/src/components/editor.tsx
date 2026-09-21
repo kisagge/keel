@@ -13,7 +13,9 @@ import { Split } from './split.js';
 import { removeNode } from '../document/commands.js';
 import { parseSource } from '../document/derive.js';
 import { createKeelDocument } from '../document/keel-document.js';
-import { SEED } from '../document/seed.js';
+import { connectProviders } from '../document/providers.js';
+import type { Providers } from '../document/providers.js';
+import { useDocumentReady } from '../hooks/use-document-ready.js';
 import { useKeelDocument } from '../hooks/use-keel-document.js';
 
 /**
@@ -30,9 +32,7 @@ function idOf(hit: Hit | undefined): string | undefined {
   return hit.group.id;
 }
 
-// `documentId` 는 이번 태스크에서 아직 안 쓴다 — Task 10 이 제공자에 넘긴다.
-// 밑줄은 "일부러 안 쓴다" 는 이 저장소의 표시다(eslint.config.js 참고).
-export function Editor({ documentId: _documentId }: { readonly documentId: string }) {
+export function Editor({ documentId }: { readonly documentId: string }) {
   /**
    * `YSyncConfig` 를 함께 넘긴다. CodeMirror 의 로컬 편집은 그 클래스의
    * 인스턴스를 origin 으로 쓰고, Yjs 는 origin 을 생성자로도 견주므로 클래스만
@@ -47,7 +47,7 @@ export function Editor({ documentId: _documentId }: { readonly documentId: strin
    * 바뀌거나 플러그인이 붙기 전에 생긴 편집이 있으면 기댈 곳이 없어진다.
    * 생성자 매칭 자체는 `keel-document` 의 검사가 따로 묶고 있다.
    */
-  const keelDocument = useMemo(() => createKeelDocument(SEED, [YSyncConfig]), []);
+  const keelDocument = useMemo(() => createKeelDocument('', [YSyncConfig]), []);
   /**
    * **문서를 정리하지 않는다.**
    *
@@ -65,6 +65,31 @@ export function Editor({ documentId: _documentId }: { readonly documentId: strin
    * 나중에 **화면을 떠나지 않은 채 편집기만 내리는 길**이 생기면 그때는
    * 문서를 효과 안에서 만들어 만듦과 지움을 짝지어야 한다.
    */
+
+  /**
+   * 문서와 제공자는 짝이 맞아야 한다 — `documentId` 가 바뀌면(같은 화면에서
+   * 다른 문서로 옮겨 가면) 옛 소켓·IndexedDB 핸들을 반드시 닫는다. 안 닫으면
+   * 옛 연결이 새 문서의 `Y.Doc` 위로 계속 업데이트를 흘려보낸다.
+   */
+  const [providers, setProviders] = useState<Providers | undefined>(undefined);
+  useEffect(() => {
+    // 접속은 **구독의 시작**이지 렌더에서 끌어낼 수 있는 값이 아니다 — 소켓과
+    // IndexedDB 핸들은 effect 안에서만 만들어야 정리(cleanup)와 짝이 맞는다.
+    // 이 함수로 한 겹 감싸 두는 이유는 `set-state-in-effect` 규칙 때문이다 —
+    // effect 본문에서 곧장 `setState` 를 부르면 "렌더에서 구할 수 있던 값을
+    // effect 로 끌어냈다" 는 패턴과 구분이 안 된다. 여기서는 그 반대다:
+    // `connectProviders` 자체가 부수 효과이고, 그 결과를 화면에 알리는 일이
+    // 바로 "외부 시스템 접속을 구독한다" 는 정석 용례다.
+    const connect = () => {
+      const connected = connectProviders(documentId, keelDocument.doc);
+      setProviders(connected);
+      return connected;
+    };
+    const connected = connect();
+    return () => connected.destroy();
+  }, [documentId, keelDocument]);
+
+  const ready = useDocumentReady(keelDocument, providers);
 
   /**
    * **여기서 한 번만 파싱한다.** 나온 그래프를 캔버스에 그대로 넘긴다.
@@ -185,6 +210,14 @@ export function Editor({ documentId: _documentId }: { readonly documentId: strin
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [clearSelection, keelDocument, target]);
+
+  if (!ready) {
+    return (
+      <main style={{ display: 'grid', placeItems: 'center', height: '100dvh' }}>
+        <p style={{ color: 'var(--keel-muted)' }}>불러오는 중</p>
+      </main>
+    );
+  }
 
   return (
     <Split
