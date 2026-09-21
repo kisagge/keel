@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CompactionService } from './compaction.service.js';
+import { PersistenceService } from './persistence.js';
 
 /**
  * `PrismaService` 를 여기 다시 적지 않는다 — 이 모듈은 그것을 주입받아 쓸 뿐,
@@ -11,7 +12,7 @@ import { CompactionService } from './compaction.service.js';
  * 이 모듈을 거치지 않는다.
  */
 @Module({
-  providers: [CompactionService],
-  exports: [CompactionService],
+  providers: [CompactionService, PersistenceService],
+  exports: [CompactionService, PersistenceService],
 })
 export class RealtimeModule {}
