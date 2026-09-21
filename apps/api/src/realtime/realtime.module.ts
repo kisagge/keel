@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CompactionService } from './compaction.service.js';
+import { ConnectionRegistry } from './connections.js';
 import { PersistenceService } from './persistence.js';
 
 /**
@@ -12,7 +13,7 @@ import { PersistenceService } from './persistence.js';
  * 이 모듈을 거치지 않는다.
  */
 @Module({
-  providers: [CompactionService, PersistenceService],
-  exports: [CompactionService, PersistenceService],
+  providers: [CompactionService, PersistenceService, ConnectionRegistry],
+  exports: [CompactionService, PersistenceService, ConnectionRegistry],
 })
 export class RealtimeModule {}

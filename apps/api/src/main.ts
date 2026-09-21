@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
+import { attachRealtime } from './realtime/connection.js';
 
 const PORT = Number(process.env['PORT'] ?? 4000);
 
@@ -9,6 +10,7 @@ async function bootstrap(): Promise<void> {
   // 화면은 다른 출처에서 뜬다(Next 는 3000, 여기는 4000).
   app.enableCors({ origin: true });
   await app.listen(PORT);
+  attachRealtime(app.getHttpServer(), app);
 }
 
 await bootstrap();

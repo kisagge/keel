@@ -12,3 +12,8 @@ allowBuilds:
   '@nestjs/core': true
   '@swc/core': true
   '@prisma/client': true
+  # y-leveldb 자체는 안 쓴다(영속화는 Prisma 로 직접 한다), 그런데
+  # `@y/websocket-server/utils` 가 최상위에서 `y-leveldb` 를 그냥 import 해
+  # 버려서, 네이티브 바인딩이 빌드돼 있지 않으면 그 모듈을 불러오는 순간
+  # 죽는다(우리가 LevelDB 를 쓰든 안 쓰든). 빌드를 허용해야 로드가 된다
+  leveldown: true

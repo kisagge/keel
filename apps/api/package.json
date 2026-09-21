@@ -17,7 +17,7 @@
     "@nestjs/core": "12.0.3",
     "@nestjs/platform-express": "12.0.3",
     "@prisma/client": "6.19.3",
-    "@y/websocket-server": "0.1.5",
+    "@y/websocket-server": "0.1.1",
     "nanoid": "6.0.1",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
@@ -38,6 +38,7 @@
     "supertest": "7.2.2",
     "typescript": "6.0.3",
     "unplugin-swc": "1.6.0",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "y-websocket": "3.1.0"
   }
 }
