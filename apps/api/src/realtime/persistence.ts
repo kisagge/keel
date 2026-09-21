@@ -28,6 +28,19 @@ export class PersistenceService {
     this.log.error(`${documentId}: 저장 실패`, error);
   };
 
+  /**
+   * 복원이 실패한 문서. **재시작 전까지 이 프로세스에서 다시 열리지 않는다.**
+   *
+   * 부분 복원된 문서를 내보내면 그 위의 편집이 갈라진 역사로 쌓인다. 자동으로
+   * 되살리려 애쓰는 것보다 사람이 보는 쪽이 맞다 — 복원이 실패했다는 것은
+   * 저장된 것이 깨졌다는 뜻이고, 그건 사람이 들여다볼 일이다.
+   */
+  private readonly broken = new Set<string>();
+
+  poisoned(documentId: string): boolean {
+    return this.broken.has(documentId);
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly compaction: CompactionService,
@@ -66,11 +79,17 @@ export class PersistenceService {
       });
     });
 
-    restoreInto(
-      doc,
-      snapshot === null ? undefined : new Uint8Array(snapshot.state),
-      tail.map((row) => new Uint8Array(row.update)),
-    );
+    try {
+      restoreInto(
+        doc,
+        snapshot === null ? undefined : new Uint8Array(snapshot.state),
+        tail.map((row) => new Uint8Array(row.update)),
+      );
+    } catch (error) {
+      this.broken.add(documentId);
+      this.onFailure(documentId, error);
+      throw error;
+    }
   }
 
   async writeState(documentId: string, doc: Y.Doc): Promise<void> {

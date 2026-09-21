@@ -29,6 +29,13 @@ export function attachRealtime(server: Server, app: INestApplication): void {
   // 여기서 그 약속을 직접 붙잡아 뒀다가, 소켓을 넘기기 전에 기다린다
   const bindings = new Map<string, Promise<void>>();
 
+  persistence.onFailure = (documentId, error) => {
+    log.error(`${documentId}: 저장 실패 — 이 문서의 소켓을 끊는다`, error);
+    // 조용히 로그만 남기면 사람은 계속 작업하다 전부 잃는다.
+    // 1011 = 서버가 예상 못 한 사정으로 요청을 못 끝냈다
+    registry.closeAll(documentId, 1011, 'persistence failed');
+  };
+
   // `setPersistence` 는 모듈 전역이다. 부트스트랩에서 한 번만 건다
   setPersistence({
     // 선언된 타입은 `void` 를 반환하라고 한다(내부에서 결과를 기다리지
@@ -72,6 +79,12 @@ export function attachRealtime(server: Server, app: INestApplication): void {
 
       if (!exists) {
         socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
+      if (persistence.poisoned(documentId)) {
+        socket.write('HTTP/1.1 503 Service Unavailable\r\n\r\n');
         socket.destroy();
         return;
       }
