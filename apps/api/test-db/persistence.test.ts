@@ -53,8 +53,10 @@ describe('영속화', () => {
   });
 
   it('복원이 낸 변화를 도로 쓰지 않는다', async () => {
-    // restoreInto 가 RESTORE origin 으로 묶어 주는 것을 여기서 확인한다.
-    // 이게 새면 문서를 열 때마다 로그가 두 배로 불어난다.
+    // bindState 는 리스너를 먼저 걸고 나서 restoreInto 를 부른다 — 복원이
+    // 내는 update 가 반드시 이 리스너를 거치게 하기 위해서다. 그 update 를
+    // 실제로 걸러내는 것은 RESTORE origin 가드다(persistence.ts). 이게
+    // 새면 문서를 열 때마다 로그가 두 배로 불어난다.
     const { id } = await documents.create();
     const before = await prisma.docUpdate.count({ where: { documentId: id } });
 
@@ -67,6 +69,10 @@ describe('영속화', () => {
   });
 
   it('업데이트를 들어온 순서대로 쌓는다', async () => {
+    // 이 검사는 실제 DB 경로가 끝까지 도는 것을 보여 준다 — 순서를 지키는
+    // 결정적인 증거는 아니다(로컬 DB 가 빨라 줄을 안 세워도 어쩌다 순서가
+    // 맞을 수 있다). 그 증거는 test/write-queue.test.ts 에 있다 — 손으로
+    // 통제한 프라미스로 "앞 것이 안 끝나면 뒤 것이 못 시작한다" 를 못 박는다.
     const { id } = await documents.create();
     const doc = new Y.Doc();
     await persistence.bindState(id, doc);
