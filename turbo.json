@@ -28,6 +28,10 @@
     "lint": { "dependsOn": ["^build"], "outputs": [] },
     "typecheck": { "dependsOn": ["^build"], "outputs": [] },
     "test": { "dependsOn": ["^build"], "outputs": [] },
+    "test:db": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "e2e": { "dependsOn": ["^build"], "cache": false }
   }
 }

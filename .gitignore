@@ -8,6 +8,7 @@ coverage/
 .env
 .env.local
 !.env.example
+apps/api/.env
 
 # Playwright
 test-results/

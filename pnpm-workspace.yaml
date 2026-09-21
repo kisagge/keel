@@ -10,3 +10,5 @@ allowBuilds:
   '@prisma/engines': true
   esbuild: true
   '@nestjs/core': true
+  '@swc/core': true
+  '@prisma/client': true

@@ -1,0 +1,13 @@
+{
+  "extends": "@keel/config/tsconfig/node.json",
+  "compilerOptions": {
+    /**
+     * 이 저장소의 다른 패키지들은 TS 소스를 그대로 물고 쓰이지만(main 이
+     * `./src/index.ts`), apps/api 는 저장소 밖에서 Node 프로세스로 돈다.
+     * `pnpm build` 가 실제로 dist/ 를 찍어야 한다 — 그래서 noEmit 을 켜지
+     * 않는다.
+     */
+    "outDir": "dist"
+  },
+  "include": ["src/**/*", "test/**/*", "test-db/**/*"]
+}
