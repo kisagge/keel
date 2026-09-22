@@ -2,6 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 import type { CSSProperties } from 'react';
+import { connectionMessage, connectionState } from './connection-message.js';
 import type { Providers } from '../document/providers.js';
 
 /**
@@ -42,19 +43,15 @@ export function ConnectionStatus({ providers }: { readonly providers: Providers 
   if (providers === undefined) return null;
 
   const hasLocal = providers.local !== undefined;
-  const message = connected
-    ? '저장됨'
-    : hasLocal
-      ? '연결 끊김 — 지금 고치는 것은 이 브라우저에만 있다'
-      : '연결 끊김 — 지금 고치는 것은 저장되지 않는다';
+  const state = connectionState(connected);
 
   return (
     <p
       data-testid="connection-status"
-      data-state={connected ? 'connected' : 'disconnected'}
+      data-state={state}
       style={{ ...bar, color: connected ? 'var(--keel-muted)' : '#b45309' }}
     >
-      {message}
+      {connectionMessage(connected, hasLocal)}
     </p>
   );
 }
