@@ -149,3 +149,38 @@ test('편집기 안에서 Delete 를 눌러도 고른 노드가 남는다', asyn
   const after = await sceneSummary(page);
   expect(after.nodes.map((n) => n.id)).toContain('orders');
 });
+
+test('붙어 있으면 연결 상태가 그렇게 말한다', async ({ page }) => {
+  await expect(page.getByTestId('connection-status')).toHaveAttribute('data-state', 'connected');
+});
+
+/**
+ * **기본 5 초 제한(`expect` 타임아웃)으로는 안 잡힌다** — 직접 재 봤다.
+ *
+ * `context.setOffline(true)` 는 이미 뚫려 있는 웹소켓을 그 자리에서 끊지
+ * 않는다. 프레임을 조용히 블랙홀로 보낼 뿐이라 브라우저의 `onclose`/`onerror`
+ * 가 곧바로 안 뜬다. 대신 `y-websocket` 의 `WebsocketProvider` 가 "30 초
+ * 동안 메시지가 안 왔다" 는 자체 워치독으로 소켓을 강제로 닫고 나서야
+ * `status` 가 `disconnected` 로 바뀐다(그 상수는 라이브러리에 박혀 있어
+ * `connectProviders` 에서 손댈 자리가 없다). Playwright 의 `websocket`
+ * 이벤트로 프레임을 직접 찍어 확인했다 — `setOffline` 직후로는
+ * `framereceived` 가 뚝 끊기고, 그로부터 30~33 초 뒤에야 실제 `close` 와
+ * `ERR_INTERNET_DISCONNECTED` 재접속 시도가 찍힌다.
+ *
+ * 그래서 이 검사만 시간을 넉넉히 준다 — 잠으로 통과시키는 게 아니라
+ * 실측한 지연을 그대로 기다리는 것이다.
+ */
+test('끊기면 이 브라우저에만 있다고 말한다', async ({ page, context }) => {
+  test.setTimeout(60_000);
+
+  await context.setOffline(true);
+
+  await expect(page.getByTestId('connection-status')).toHaveAttribute(
+    'data-state',
+    'disconnected',
+    { timeout: 45_000 },
+  );
+  await expect(page.getByTestId('connection-status')).toContainText('이 브라우저에만');
+
+  await context.setOffline(false);
+});

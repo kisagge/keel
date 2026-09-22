@@ -5,6 +5,7 @@ import type { Hit } from '@keel/renderer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { YSyncConfig } from 'y-codemirror.next';
 import { CanvasPane } from './canvas-pane.js';
+import { ConnectionStatus } from './connection-status.js';
 import { DiagnosticsList } from './diagnostics.js';
 import { EditorPane } from './editor-pane.js';
 import { Inspector } from './inspector.js';
@@ -250,6 +251,7 @@ export function Editor({ documentId }: { readonly documentId: string }) {
             onGoTo={goTo}
             onCleared={clearSelection}
           />
+          <ConnectionStatus providers={providers} />
         </>
       }
     />
