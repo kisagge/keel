@@ -97,7 +97,7 @@ export function Editor({
     return () => connected.destroy();
   }, [documentId, keelDocument]);
 
-  const { ready, localEmpty } = useDocumentReady(keelDocument, providers);
+  const { ready, localCannotFill, remoteTimedOut } = useDocumentReady(keelDocument, providers);
 
   /**
    * **여기서 한 번만 파싱한다.** 나온 그래프를 캔버스에 그대로 넘긴다.
@@ -219,15 +219,18 @@ export function Editor({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [clearSelection, keelDocument, target]);
 
-  // 서버에 못 붙었는데 로컬에서도 채울 수 없으면(비었거나, 저장소가 아예
-  // 없거나, `waitForLocal` 이 시간초과로 포기했거나) 영영 안 채워진다.
-  // "불러오는 중" 을 영원히 보여 주는 것이 제일 나쁜 결과다.
+  // 로컬에서도 채울 수 없으면(비었거나, 저장소가 아예 없거나, `waitForLocal`
+  // 이 시간초과로 포기했거나) 서버가 유일한 길이다. 그 서버가 SSR 시점에
+  // 이미 안 보였거나(`!serverReachable`), 보였다고 했는데도 원격 `'sync'`
+  // 가 시간 안에 안 왔으면(`remoteTimedOut` — SSR 이후 끊긴 경우다) 더는
+  // 기다리지 않고 되돌릴 길을 보여 준다. "불러오는 중" 을 영원히 보여 주는
+  // 것이 제일 나쁜 결과다.
   //
-  // **`providers?.local !== undefined` 를 더 걸지 않는다.** `localEmpty` 는
-  // 이제 "로컬이 없다" 도 포함하므로, 더 걸면 저장소를 아예 못 쓰는 경우가
-  // 이 갈래에서 빠져나가 "불러오는 중" 에 영영 갇힌다(`task-12-report.md`
-  // 참고).
-  if (!ready && !serverReachable && localEmpty) {
+  // **`providers?.local !== undefined` 를 더 걸지 않는다.** `localCannotFill`
+  // 은 이제 "로컬이 없다" 도 포함하므로, 더 걸면 저장소를 아예 못 쓰는
+  // 경우가 이 갈래에서 빠져나가 "불러오는 중" 에 영영 갇힌다
+  // (`task-12-report.md` 참고).
+  if (!ready && localCannotFill && (!serverReachable || remoteTimedOut)) {
     return <UnreachableServer />;
   }
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LOCAL_SYNC_TIMEOUT_MS, waitForLocal } from '../src/document/local-sync.js';
+import { LOCAL_SYNC_TIMEOUT_MS, waitForLocal, waitForTimeout } from '../src/document/local-sync.js';
 
 /**
  * `y-indexeddb` 가 **비동기로** 못 열리면 `whenSynced` 는 영영 안 풀린다 —
@@ -50,5 +50,47 @@ describe('waitForLocal', () => {
 
     await vi.advanceTimersByTimeAsync(LOCAL_SYNC_TIMEOUT_MS);
     expect(await promise).toBe('unavailable');
+  });
+});
+
+/**
+ * `useDocumentReady` 가 원격 `'sync'` 를 기다리는 데 쓴다 — `providers.remote.once`
+ * 구독은 그대로 두고, "그때까지 기다리지 않고 되돌릴 길을 보여 준다" 는
+ * 신호만 시간으로 낸다(`waitForLocal` 처럼 대상 자체를 포기시키지 않는다).
+ */
+describe('waitForTimeout', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('시간이 지나면 풀린다', async () => {
+    const { promise } = waitForTimeout(1000);
+    let settled = false;
+    void promise.then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(settled).toBe(true);
+  });
+
+  it('cancel 하면 시간이 지나도 안 풀린다', async () => {
+    const { promise, cancel } = waitForTimeout(1000);
+    cancel();
+
+    let settled = false;
+    void promise.then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(settled).toBe(false);
   });
 });

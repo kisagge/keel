@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { KeelDocument } from '../document/keel-document.js';
-import { waitForLocal } from '../document/local-sync.js';
+import { REMOTE_SYNC_TIMEOUT_MS, waitForLocal, waitForTimeout } from '../document/local-sync.js';
 import type { Providers } from '../document/providers.js';
 
 /**
@@ -21,7 +21,8 @@ import type { Providers } from '../document/providers.js';
  *    이 훅이 영영 안 풀린다.
  * 2. 그러고도 비어 있으면(첫 방문, 저장소 없음, 시간초과 전부 포함) 원격까지
  *    기다린다. 비어 있지 않으면 **즉시 띄운다** — 두 번째 방문부터는
- *    네트워크를 안 기다린다.
+ *    네트워크를 안 기다린다. 이 기다림도 무한정이 아니다 — `remoteTimedOut`
+ *    참고.
  */
 export interface DocumentReady {
   readonly ready: boolean;
@@ -30,7 +31,15 @@ export interface DocumentReady {
    * 못 쓰거나(`providers.local === undefined`), 열리다 시간이 초과됐다. 세
    * 경우 모두 서버 없이는 채울 길이 없다는 점에서 같다.
    */
-  readonly localEmpty: boolean;
+  readonly localCannotFill: boolean;
+  /**
+   * 로컬에서 못 채운 채로 원격 `'sync'` 를 `REMOTE_SYNC_TIMEOUT_MS` 만큼
+   * 기다렸는데도 안 왔다. **포기가 아니다** — 원격 구독은 그대로 살아
+   * 있어서, 이 값이 `true` 가 된 뒤에도 정말 붙으면 `ready` 가 뒤따라
+   * 켜진다(자체 회복). 이 값은 "그때까지는 기다리지 않고 되돌릴 길을
+   * 보여 준다" 는 신호일 뿐이다.
+   */
+  readonly remoteTimedOut: boolean;
 }
 
 export function useDocumentReady(
@@ -38,13 +47,16 @@ export function useDocumentReady(
   providers: Providers | undefined,
 ): DocumentReady {
   const [ready, setReady] = useState(false);
-  const [localEmpty, setLocalEmpty] = useState(false);
+  const [localCannotFill, setLocalCannotFill] = useState(false);
+  const [remoteTimedOut, setRemoteTimedOut] = useState(false);
 
   useEffect(() => {
     if (providers === undefined) return;
     let cancelled = false;
+    let cancelRemoteTimeout: (() => void) | undefined;
 
     const done = (): void => {
+      cancelRemoteTimeout?.();
       if (!cancelled) setReady(true);
     };
 
@@ -53,16 +65,28 @@ export function useDocumentReady(
       if (cancelled) return;
       if (outcome === 'synced' && keelDocument.source.length > 0) return done();
 
-      // 로컬에서 못 채웠다(비었거나, 없거나, 시간초과). 서버가 채워 줄 때까지 기다린다
-      setLocalEmpty(true);
+      // 로컬에서 못 채웠다(비었거나, 없거나, 시간초과). 서버가 채워 줄 때까지
+      // 기다린다 — 이 구독은 아래 시간제한이 지나도 안 뗀다. 늦게라도 정말
+      // 붙으면 이 콜백이 그때 불린다
+      setLocalCannotFill(true);
       providers.remote.once('sync', done);
+
+      // 여기까지 왔다는 것은 서버가 채워 주길 기다리고 있다는 뜻이다. 그
+      // 기다림을 무한정 두면 `waitForLocal` 이 고치기 전의 그 영구 대기와
+      // 같은 모양이 된다 — SSR 이 서버를 봤다고 했어도, 그 사이 끊겼을 수
+      // 있다. 시간이 지나면 `remoteTimedOut` 만 켜고, 구독은 그대로 둔다
+      const { promise: timedOut, cancel } = waitForTimeout(REMOTE_SYNC_TIMEOUT_MS);
+      cancelRemoteTimeout = cancel;
+      await timedOut;
+      if (!cancelled) setRemoteTimedOut(true);
     })();
 
     return () => {
       cancelled = true;
+      cancelRemoteTimeout?.();
       providers.remote.off('sync', done);
     };
   }, [keelDocument, providers]);
 
-  return { ready, localEmpty };
+  return { ready, localCannotFill, remoteTimedOut };
 }

@@ -12,6 +12,7 @@
     "@keel/config": "workspace:*",
     "@playwright/test": "1.63.0",
     "@types/node": "24.9.2",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "yjs": "13.6.32"
   }
 }
