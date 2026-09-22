@@ -32,4 +32,8 @@ export class DocumentsService {
       select: { id: true, createdAt: true, updatedAt: true },
     });
   }
+
+  async remove(id: string): Promise<void> {
+    await this.prisma.document.deleteMany({ where: { id } });
+  }
 }

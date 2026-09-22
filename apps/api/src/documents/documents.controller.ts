@@ -1,4 +1,4 @@
-import { Controller, Get, NotFoundException, Param, Post } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, NotFoundException, Param, Post } from '@nestjs/common';
 import type { CreateDocumentResponse, DocumentSummary } from '@keel/contract';
 import { DocumentsService } from './documents.service.js';
 
@@ -25,5 +25,17 @@ export class DocumentsController {
       createdAt: found.createdAt.toISOString(),
       updatedAt: found.updatedAt.toISOString(),
     };
+  }
+
+  /**
+   * 문서를 지운다. 업데이트와 스냅샷은 `onDelete: Cascade` 가 함께 지운다.
+   *
+   * 인증이 없는 판이라 **id 를 아는 사람이 지울 수 있다.** id 가 곧 권한인
+   * 구조의 대가이고, 인증이 얹힐 때 여기에 소유자 검사가 붙는다.
+   */
+  @Delete(':id')
+  @HttpCode(204)
+  async remove(@Param('id') id: string): Promise<void> {
+    await this.documents.remove(id);
   }
 }

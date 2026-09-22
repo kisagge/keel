@@ -11,6 +11,7 @@ import { EditorPane } from './editor-pane.js';
 import { Inspector } from './inspector.js';
 import type { InspectorTarget } from './inspector.js';
 import { Split } from './split.js';
+import { UnreachableServer } from './unreachable-server.js';
 import { removeNode } from '../document/commands.js';
 import { parseSource } from '../document/derive.js';
 import { createKeelDocument } from '../document/keel-document.js';
@@ -33,7 +34,13 @@ function idOf(hit: Hit | undefined): string | undefined {
   return hit.group.id;
 }
 
-export function Editor({ documentId }: { readonly documentId: string }) {
+export function Editor({
+  documentId,
+  serverReachable,
+}: {
+  readonly documentId: string;
+  readonly serverReachable: boolean;
+}) {
   /**
    * `YSyncConfig` 를 함께 넘긴다. CodeMirror 의 로컬 편집은 그 클래스의
    * 인스턴스를 origin 으로 쓰고, Yjs 는 origin 을 생성자로도 견주므로 클래스만
@@ -90,7 +97,7 @@ export function Editor({ documentId }: { readonly documentId: string }) {
     return () => connected.destroy();
   }, [documentId, keelDocument]);
 
-  const ready = useDocumentReady(keelDocument, providers);
+  const { ready, localEmpty } = useDocumentReady(keelDocument, providers);
 
   /**
    * **여기서 한 번만 파싱한다.** 나온 그래프를 캔버스에 그대로 넘긴다.
@@ -211,6 +218,18 @@ export function Editor({ documentId }: { readonly documentId: string }) {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [clearSelection, keelDocument, target]);
+
+  // 서버에 못 붙었는데 로컬에서도 채울 수 없으면(비었거나, 저장소가 아예
+  // 없거나, `waitForLocal` 이 시간초과로 포기했거나) 영영 안 채워진다.
+  // "불러오는 중" 을 영원히 보여 주는 것이 제일 나쁜 결과다.
+  //
+  // **`providers?.local !== undefined` 를 더 걸지 않는다.** `localEmpty` 는
+  // 이제 "로컬이 없다" 도 포함하므로, 더 걸면 저장소를 아예 못 쓰는 경우가
+  // 이 갈래에서 빠져나가 "불러오는 중" 에 영영 갇힌다(`task-12-report.md`
+  // 참고).
+  if (!ready && !serverReachable && localEmpty) {
+    return <UnreachableServer />;
+  }
 
   if (!ready) {
     return (

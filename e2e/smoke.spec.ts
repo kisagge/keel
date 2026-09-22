@@ -184,3 +184,16 @@ test('끊기면 이 브라우저에만 있다고 말한다', async ({ page, cont
 
   await context.setOffline(false);
 });
+
+test('지워진 문서를 다시 열면 없다고 말한다', async ({ page, request }) => {
+  const url = page.url();
+  const id = url.split('/d/')[1]!;
+
+  // 서버에서 지운다
+  await request.delete(`http://localhost:4000/d/${id}`);
+
+  await page.goto(url);
+  await expect(page.getByTestId('missing-document')).toBeVisible();
+  // 로컬 사본이 살아 있으면 씨앗이 보인다. 안 보여야 한다
+  await expect(page.locator('.cm-content')).toHaveCount(0);
+});
