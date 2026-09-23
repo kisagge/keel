@@ -16,8 +16,14 @@
     "NEXT_PUBLIC_KEEL_WS_URL"
   ],
   "tasks": {
+    "generate": {
+      // Prisma 클라이언트는 코드다 — 스키마가 바뀌지 않아도 node_modules 가
+      // 통째로 새로 깔리면(클린 클론, CI, .prisma 삭제) 타입도 런타임 구현도
+      // 같이 사라진다. 캐시로 건너뛰면 그 상태를 못 잡아내므로 매번 돌린다.
+      "cache": false
+    },
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "generate"],
       "env": ["NEXT_PUBLIC_KEEL_WS_URL"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
@@ -26,11 +32,11 @@
       "cache": false,
       "persistent": true
     },
-    "lint": { "dependsOn": ["^build"], "outputs": [] },
-    "typecheck": { "dependsOn": ["^build"], "outputs": [] },
-    "test": { "dependsOn": ["^build"], "outputs": [] },
+    "lint": { "dependsOn": ["^build", "generate"], "outputs": [] },
+    "typecheck": { "dependsOn": ["^build", "generate"], "outputs": [] },
+    "test": { "dependsOn": ["^build", "generate"], "outputs": [] },
     "test:db": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "generate"],
       "cache": false
     },
     "e2e": { "dependsOn": ["^build"], "cache": false }
