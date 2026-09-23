@@ -358,3 +358,77 @@ test('서버가 404 가 아니게 답해도 로컬 사본은 그대로 있다', 
   // 지워지지 않았다 — 심어 둔 레코드가 그대로 있다
   await expect.poll(() => localUpdateCount(page, id)).toBeGreaterThan(0);
 });
+
+/**
+ * 브리프 원문은 DSL 식별자 자리에 한글(`남는큐`)을 그대로 넣었지만,
+ * `packages/dsl/src/lexer.ts` 의 `IDENT_START`/`IDENT_REST` 는 ASCII
+ * 글자·숫자·`_`·`-` 만 식별자로 받는다 — 한글 식별자는 파서가 노드를
+ * 아예 안 만든다(라벨 자리의 큰따옴표 문자열은 한글이어도 된다. 씨앗
+ * 문서의 `queue events "이벤트 큐"` 가 그 모양이다). 그래서 식별자는
+ * ASCII 로 쓰고 한글은 라벨에 둔다 — 실제로 실패하는 것을 보고 고쳤다.
+ */
+test('새로고침해도 남는다', async ({ page }) => {
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type('\nqueue stayq "남는다"');
+
+  await expect
+    .poll(async () => (await sceneSummary(page)).nodes.map((n) => n.id))
+    .toContain('stayq');
+
+  await page.reload();
+  await page.waitForFunction(() => window.__keel !== undefined);
+
+  expect((await sceneSummary(page)).nodes.map((n) => n.id)).toContain('stayq');
+});
+
+test('두 사람이 같은 URL 에서 서로의 편집을 본다', async ({ page, browser }) => {
+  // README 첫 줄의 "실시간 협업" 이 실제로 도는지를 기계가 확인하는 자리다
+  const url = page.url();
+  const otherContext = await browser.newContext();
+  const other = await otherContext.newPage();
+  await other.goto(url);
+  await other.waitForFunction(() => window.__keel !== undefined);
+
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type('\nservice seenboth "둘이 본다"');
+
+  await expect
+    .poll(async () => (await sceneSummary(other)).nodes.map((n) => n.id), { timeout: 10_000 })
+    .toContain('seenboth');
+
+  await otherContext.close();
+});
+
+test('끊긴 채 고친 것이 다시 붙을 때 올라간다', async ({ page, context, browser }) => {
+  const url = page.url();
+
+  await context.setOffline(true);
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type('\ndb offlinedb "끊긴 채 적었다"');
+
+  await expect
+    .poll(async () => (await sceneSummary(page)).nodes.map((n) => n.id))
+    .toContain('offlinedb');
+
+  await context.setOffline(false);
+  await expect(page.getByTestId('connection-status')).toHaveAttribute(
+    'data-state',
+    'connected',
+    { timeout: 15_000 },
+  );
+
+  // 다른 브라우저에서 보인다 = 서버에 올라갔다
+  const otherContext = await browser.newContext();
+  const other = await otherContext.newPage();
+  await other.goto(url);
+  await other.waitForFunction(() => window.__keel !== undefined);
+
+  await expect
+    .poll(async () => (await sceneSummary(other)).nodes.map((n) => n.id), { timeout: 10_000 })
+    .toContain('offlinedb');
+
+  await otherContext.close();
+});
