@@ -39,11 +39,20 @@ async function sceneSummary(page: Page): Promise<SceneSummary> {
  * 부르든 안 부르든 똑같이 뜬다(에디터를 아예 안 그리므로). 이 함수가 그
  * 간극을 메운다: 브라우저가 실제로 들고 있는 IndexedDB 를 직접 연다.
  *
- * 디비가 아예 없거나(지워졌다) 스토어가 없으면 0 을 돌려준다. **스토어를
- * 새로 만들지 않는다** — `onupgradeneeded` 콜백을 비워 두면, 디비가 없어서
- * 새로 만들어지는 경우에도 빈 v1 디비 하나가 남을 뿐 `y-indexeddb` 가
- * 기대하는 모양을 흉내 내지 않는다. 그래서 이 함수를 부른 뒤에 진짜
- * `IndexeddbPersistence` 가 같은 이름을 다시 열어도 안 꼬인다.
+ * 디비가 아예 없거나(지워졌다) 스토어가 없으면 0 을 돌려준다.
+ *
+ * **`onupgradeneeded` 에서 스토어를 만든다 — 비워 두면 안 된다.** 처음엔
+ * 비워 뒀었다: "어차피 없으면 0 이니 만들 필요가 없다" 고 생각했다. 그런데
+ * `indexedDB.open` 은 **버전이 없으면 그 자리에서 새 v1 디비를 만들고 그
+ * 버전으로 확정한다** — 그 뒤 진짜 `IndexeddbPersistence` 가 같은 이름을
+ * (역시 버전 없이) 열면 이미 v1 이라 `onupgradeneeded` 가 **다시는 안
+ * 불린다.** `updates`/`custom` 스토어를 끝내 못 만들고, 곧이어 오는 Yjs
+ * 업데이트를 저장하려다 "object store 를 못 찾는다" 며 죽는다 — 실제로
+ * 한 번 이렇게 깨진 것을 보고 고쳤다(`새로고침을 넘어 서버에도 쌓인다`
+ * 검사를 새로 만들며 아직 한 번도 안 열어 본 문서에 이 함수를 먼저
+ * 불렀을 때). 그래서 `seedLocalUpdate` 와 똑같은 모양을 여기서도 만든다 —
+ * 이 함수가 먼저 열든 나중에 열든 `y-indexeddb` 가 기대하는 스키마가
+ * 항상 존재해야 한다.
  */
 async function localUpdateCount(page: Page, documentId: string): Promise<number> {
   return page.evaluate(
@@ -51,8 +60,13 @@ async function localUpdateCount(page: Page, documentId: string): Promise<number>
       new Promise<number>((resolve, reject) => {
         const req = indexedDB.open(name);
         req.onupgradeneeded = () => {
-          // 버전 0 → 1: 디비가 없었다는 뜻. 스토어를 안 만들면 아래
-          // onsuccess 에서 'updates' 가 없다고 보고 곧바로 0 을 준다
+          const db = req.result;
+          if (!db.objectStoreNames.contains('updates')) {
+            db.createObjectStore('updates', { autoIncrement: true });
+          }
+          if (!db.objectStoreNames.contains('custom')) {
+            db.createObjectStore('custom');
+          }
         };
         req.onsuccess = () => {
           const db = req.result;
@@ -380,6 +394,76 @@ test('새로고침해도 남는다', async ({ page }) => {
   await page.waitForFunction(() => window.__keel !== undefined);
 
   expect((await sceneSummary(page)).nodes.map((n) => n.id)).toContain('stayq');
+});
+
+/**
+ * 위 검사(`새로고침해도 남는다`)는 **같은 브라우저 컨텍스트** 안에서 돈다 —
+ * `page.reload()` 는 페이지만 다시 그릴 뿐 IndexedDB 는 그대로 남는다.
+ * 그래서 그 검사는 로컬 사본만으로도 통과한다: 서버가 아무것도 안 저장해도
+ * 초록이다. 이 태스크의 역사가 그 사고를 실제로 보여 줬다 — 앞선(중단된)
+ * 세션이 `apps/api/src/realtime/persistence.ts` 의 `docUpdate.create` 를
+ * 통째로 주석 처리한 채로 두었는데, 로컬 저장은 멀쩡했다. 그 상태에서도
+ * 위 검사는 통과했을 것이다. 이름이 말하는 것("남는다")을 실제로는 못
+ * 지키는 검사였다 — Task 12 의 유령 문서 검사가 걸렸던 것과 같은 결함이다.
+ *
+ * 이 검사는 로컬과 **서버의 인메모리 캐시** 둘 다를 비껴가는 경로로
+ * "정말 DB 에 쌓였다" 를 확인한다.
+ *
+ * **`browser.newContext()` 만으로는 모자란다** — 처음에 그렇게만 짜고
+ * 돌려 보니, `docUpdate.create` 를 통째로 주석 처리해도 이 검사가 그대로
+ * 초록이었다. 이유를 `@y/websocket-server` 소스에서 찾았다:
+ * `getYDoc(documentId, true)` 로 만든 문서별 `Y.Doc` 은 접속이 하나라도
+ * 남아 있는 한 서버 프로세스 메모리에 계속 산다. 새 컨텍스트가 같은 문서에
+ * 붙으면 그 살아 있는 메모리를 그대로 이어받아 동기화되므로, DB 를 전혀
+ * 안 거치고도 내용이 보인다 — Task 7 의 실시간 중계(`두 사람이 같은 URL...`
+ * 검사가 증명하는 바로 그 경로)가 이 검사를 대신 통과시켜 버린 것이다.
+ *
+ * `closeConn`(같은 소스)을 보면, 그 문서에 붙은 **마지막** 접속이 끊길
+ * 때만 서버가 `writeState` 를 부르고 `Y.Doc` 을 버리며 캐시에서 지운다.
+ * 그러니 `page` 자신부터 닫아야 한다 — 이 문서엔 접속이 `page` 하나뿐이라,
+ * 그것을 닫으면 서버 메모리의 사본이 사라지고 다음 접속은 반드시 DB 에서
+ * 다시 읽는다.
+ *
+ * 로컬 쪽도 여전히 가린다: `browser.newContext()` 로 새 컨텍스트를 열면
+ * 그 컨텍스트는 이 문서의 IndexedDB 를 한 번도 연 적이 없다 — `/d/<id>` 로
+ * 아직 한 번도 이동하지 않은 채로 `localUpdateCount` 를 찍어, 그 시작이
+ * 진짜 0 임을 먼저 확인해 둔다.
+ *
+ * 이 둘(로컬도 없고, 서버 메모리도 없고)을 다 확인한 뒤에 같은 URL 을
+ * 열어 내용이 보이면, 그 내용은 **DB 에서 막 복원된 것**일 수밖에 없다.
+ */
+test('새로고침을 넘어 서버에도 쌓인다', async ({ page, browser }) => {
+  const url = page.url();
+  const id = url.split('/d/')[1]!;
+
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type('\nqueue persistq "서버에도 쌓인다"');
+
+  await expect
+    .poll(async () => (await sceneSummary(page)).nodes.map((n) => n.id))
+    .toContain('persistq');
+
+  // 이 문서에 붙은 마지막 접속을 닫는다 — 서버가 메모리의 Y.Doc 을 진짜로
+  // 버리게 만드는 유일한 길이다(위 주석의 closeConn 참고)
+  await page.close();
+
+  const otherContext = await browser.newContext();
+  const other = await otherContext.newPage();
+
+  // 이 문서로는 아직 한 번도 이동하지 않은 채로, 이 컨텍스트가 이 id 의
+  // 로컬 사본을 정말 하나도 안 들고 있는지 먼저 찍는다
+  await other.goto('/__probe__');
+  await expect.poll(() => localUpdateCount(other, id)).toBe(0);
+
+  await other.goto(url);
+  await other.waitForFunction(() => window.__keel !== undefined);
+
+  await expect
+    .poll(async () => (await sceneSummary(other)).nodes.map((n) => n.id), { timeout: 10_000 })
+    .toContain('persistq');
+
+  await otherContext.close();
 });
 
 test('두 사람이 같은 URL 에서 서로의 편집을 본다', async ({ page, browser }) => {
