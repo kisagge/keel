@@ -40,8 +40,11 @@ export function connectProviders(documentId: string, doc: Y.Doc): Providers {
       remote.destroy();
       // `IndexeddbPersistence.destroy()` 는 약속을 돌려준다(진행 중이던 쓰기를
       // 마저 끝낸다). 화면이 닫히는 마당에 그 약속을 잡아 둘 곳이 없어 흘려
-      // 보낸다 — 실패해도 다음에 열 때 IndexedDB 가 다시 처음부터 채워진다
-      void local?.destroy();
+      // 보낸다 — 실패해도 다음에 열 때 IndexedDB 가 다시 처음부터 채워진다.
+      // 다만 거부를 잡아는 둬야 한다 — `local-sync.ts` 가 다루는 바로 그
+      // "비동기 open 이 조용히 실패하는" 경우 `destroy()` 도 거부할 수 있어서,
+      // 안 잡으면 처리되지 않은 거부가 된다
+      local?.destroy().catch(() => {});
     },
   };
 }

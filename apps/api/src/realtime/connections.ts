@@ -26,6 +26,15 @@ export class ConnectionRegistry {
   }
 
   closeAll(documentId: string, code: number, reason: string): void {
-    for (const socket of this.byDocument.get(documentId) ?? []) socket.close(code, reason);
+    // 소켓 하나가 close() 에서 던지면 for 가 거기서 멈춰 나머지는 열린 채로
+    // 남는다. 그 나머지가 "저장됨" 을 계속 보여주는 동안 실제로는 저장이
+    // 안 되고 있으니, 이 메서드가 지키려는 불변조건을 스스로 깬다.
+    for (const socket of this.byDocument.get(documentId) ?? []) {
+      try {
+        socket.close(code, reason);
+      } catch {
+        // 이 소켓은 못 끊었어도 나머지는 마저 끊는다
+      }
+    }
   }
 }

@@ -61,9 +61,14 @@ export function useDocumentReady(
     };
 
     void (async () => {
-      const outcome = await waitForLocal(providers.local);
+      await waitForLocal(providers.local);
       if (cancelled) return;
-      if (outcome === 'synced' && keelDocument.source.length > 0) return done();
+      // outcome 자체는 안 본다 — 'unavailable' 이 시간초과로 왔더라도(로컬이
+      // 아니라 시계가 이긴 것뿐) 그 사이 원격이 이미 동기화를 끝내 내용이
+      // 찼을 수 있다. 그런데도 outcome 만 보고 아래 'sync' 구독으로 내려가면
+      // 다시는 안 올 이벤트를 기다리다 8 초 뒤 UnreachableServer 를 보여준다 —
+      // 문서가 이미 메모리에 다 있는데도. 그래서 내용이 있는지만 본다
+      if (keelDocument.source.length > 0) return done();
 
       // 로컬에서 못 채웠다(비었거나, 없거나, 시간초과). 서버가 채워 줄 때까지
       // 기다린다 — 이 구독은 아래 시간제한이 지나도 안 뗀다. 늦게라도 정말
@@ -84,7 +89,12 @@ export function useDocumentReady(
     return () => {
       cancelled = true;
       cancelRemoteTimeout?.();
-      providers.remote.off('sync', done);
+      // `off('sync', done)` 은 여기 없다 — `once` 를 lib0 Observable 이 안에서
+      // 감싸므로 그 래퍼가 실제로 등록된 리스너이고, `done` 자체로는 못
+      // 찾아 뗀다. 걸어도 아무 일이 안 일어나는 코드라 지웠다. 새는 것을
+      // 막는 것은 위의 `cancelled` 플래그(콜백이 불려도 `setReady` 를 안 함)와,
+      // 같은 teardown 에서 provider 자체가 파괴되어 다시는 'sync' 를 안 내는
+      // 것 둘이다
     };
   }, [keelDocument, providers]);
 
