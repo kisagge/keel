@@ -130,10 +130,14 @@ Shop 에서 가장 잘 통한 방법이라 가져왔다. **목록을 손으로 �
 ## 구조
 
 ```
+apps/
+  web/         에디터 화면 (Next)
+  api/         Yjs 중계와 영속화 (NestJS · Prisma · Postgres)
 packages/
   dsl/         DSL 렉서·파서·프린터 — 위치를 보존한 CST, 구간 수정(TextEdit) API
   graph/       그래프 모델·버전 diff — I/O 없는 순수 함수
   renderer/    장면 기하(좌표·경계·접점·뷰포트·컬링·히트테스트)와 Canvas 2D 그리기
+  contract/    web 과 api 가 함께 보는 HTTP 계약
   config/      tsconfig·eslint 프리셋
 ```
 
@@ -149,6 +153,13 @@ packages/
 
 ```bash
 pnpm install
+docker compose up -d
+cp apps/api/.env.example apps/api/.env
+pnpm --filter @keel/api exec prisma migrate deploy
+pnpm dev
+```
+
+```bash
 pnpm test
 pnpm typecheck
 pnpm lint
@@ -163,10 +174,13 @@ Node 24 와 pnpm 11 이 필요하다. `.nvmrc` 와 `packageManager` 필드에 �
 - `@keel/renderer` — 장면 기하, 그룹 경계, 엣지 접점·화살촉·자기 고리, 팬·줌,
   뷰포트 컬링, 균일 격자 히트테스트, Canvas 2D 그리기 (테스트 381)
 - `@keel/web` — 좌우 분할 에디터. 텍스트↔캔버스 양방향, 팬·줌, 진단, 인스펙터,
-  하나짜리 되돌리기 역사 (검사 82, e2e 4)
+  하나짜리 되돌리기 역사 (검사 98, e2e 13)
+- **저장과 실시간** — 두 사람이 같은 URL 에서 서로의 편집을 본다. 새로고침·
+  탭 닫기를 넘어 남고, 끊긴 채 고친 것도 다시 붙을 때 올라간다.
+  업데이트 로그 + 스냅샷 접기라 버전 화면이 이 위에 선다
 
 ```
-dsl 71 · graph 16 · renderer 381 · web 82
+dsl 71 · graph 16 · renderer 381 · web 98
 ```
 
 렌더러는 아직 **임시 배치**를 쓴다(`stopgap-layout.ts`). 겹치지 않고 결정적이라는
@@ -177,11 +191,10 @@ dsl 71 · graph 16 · renderer 381 · web 82
 
 **만드는 순서대로.** 아래는 계획이지 도는 코드가 아니다.
 
-- **실시간** (`apps/api`, NestJS) — Yjs WebSocket 중계, Postgres 업데이트 로그 +
-  R2 스냅샷, 구글 로그인, 프레즌스, 오프라인 재접속
-  화면은 이미 Yjs 로 돌고 있다 — 제공자만 꽂으면 된다. 다만
+- **실시간** — 구글 로그인, 프레즌스, 오프라인 충돌 UX, 인스턴스 2 대 이상.
+  중계·저장·로컬 저장은 됐다(`지금까지 된 것` 참고). 다만
   `PaintOptions.selection` 이 `Set<string>` 이라 사람별 색을 못 담으므로
-  `Map<string, string>` 으로 넓히는 것이 첫 일감이다
+  프레즌스를 넣을 때 `Map<string, string>` 으로 넓히는 것이 첫 일감이다
 - **자동 레이아웃** — ELK layered 를 Web Worker 에서. 키 입력마다 돌리지 않고
   신규 노드만 배치, 전체 재배치는 명시적으로. `stopgap-layout.ts` 를 대신한다.
   **글자는 워커에서 재지 않는다** — 워커의 어림값과 본체의 실측이 어긋나면

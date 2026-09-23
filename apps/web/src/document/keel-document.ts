@@ -44,7 +44,7 @@ export interface KeelDocument {
  *   CodeMirror 을 몰라도 된다.
  */
 export function createKeelDocument(
-  seed: string,
+  seed = '',
   extraTrackedOrigins: readonly unknown[] = [],
 ): KeelDocument {
   const doc = new Y.Doc();

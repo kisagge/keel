@@ -1,9 +1,11 @@
 /**
  * 첫 화면의 씨앗.
  *
- * `packages/dsl/fixtures/order-flow.keel` 과 같은 내용이다. 저장이 없는 판이라
- * 새로고침하면 이리로 돌아온다 — 저장은 `apps/api` 의 일이라는 것을 화면이
- * 솔직하게 드러낸다.
+ * `packages/dsl/fixtures/order-flow.keel` 과 같은 내용이다.
+ *
+ * **서버가 소유한다.** 클라이언트가 각자 심으면 빈 문서에 둘이 동시에 들어올
+ * 때 양쪽 씨앗이 다 살아남아 문서가 두 배가 된다 — `cb55a9b` 와
+ * `apps/web/test/concurrent.test.ts` 가 이미 증명해 둔 현상이다.
  */
 export const SEED = `# 주문이 들어와서 결제까지
 

@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Document {
+  id        String      @id
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  updates   DocUpdate[]
+  snapshot  Snapshot?
+}
+
+/// 재생 순서가 곧 문서다. createdAt 으로 정렬하면 같은 밀리초에 들어온
+/// 둘의 순서가 불안정해서, 단조 증가하는 seq 로 정렬한다.
+model DocUpdate {
+  seq        BigInt   @id @default(autoincrement())
+  documentId String
+  update     Bytes
+  createdAt  DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, seq])
+}
+
+/// throughSeq 까지를 접은 것이다. 복원은 state 를 적용한 뒤
+/// seq > throughSeq 인 것만 마저 얹는다.
+model Snapshot {
+  documentId String   @id
+  state      Bytes
+  throughSeq BigInt
+  createdAt  DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
