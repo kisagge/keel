@@ -154,6 +154,7 @@ packages/
 ```bash
 pnpm install
 docker compose up -d
+cp apps/api/.env.example apps/api/.env
 pnpm --filter @keel/api exec prisma migrate deploy
 pnpm dev
 ```

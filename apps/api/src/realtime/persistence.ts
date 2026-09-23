@@ -47,11 +47,23 @@ export class PersistenceService {
   ) {}
 
   async bindState(documentId: string, doc: Y.Doc): Promise<void> {
-    const snapshot = await this.prisma.snapshot.findUnique({ where: { documentId } });
-    const tail = await this.prisma.docUpdate.findMany({
-      where: { documentId, seq: { gt: snapshot?.throughSeq ?? 0n } },
-      orderBy: { seq: 'asc' },
-    });
+    // 두 읽기를 한 트랜잭션으로 묶는다 — 그냥 따로 읽는 두 개의 무해한 select
+    // 처럼 보여도 지우면 안 된다. 스냅샷을 읽은 뒤 접기가 그 사이에 끼어들면
+    // (스냅샷을 쓰고 접힌 행을 지우는 것이 바로 이 자리다), throughSeq 아래를
+    // 덮는 스냅샷은 못 보고 꼬리는 이미 줄어든 뒤를 읽어 그 구간이 통째로
+    // 빈다. 접속을 여는 매 순간이 이 경합의 창이라 사람이 새로고침만 해도
+    // 닿는다 — 부분 복원을 조용히 내보내느니 읽기를 한 스냅샷에 묶어 막는다.
+    const [snapshot, tail] = await this.prisma.$transaction(
+      async (tx) => {
+        const s = await tx.snapshot.findUnique({ where: { documentId } });
+        const t = await tx.docUpdate.findMany({
+          where: { documentId, seq: { gt: s?.throughSeq ?? 0n } },
+          orderBy: { seq: 'asc' },
+        });
+        return [s, t] as const;
+      },
+      { isolationLevel: 'RepeatableRead' },
+    );
 
     this.appended.set(documentId, tail.length);
 
